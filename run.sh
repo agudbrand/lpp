@@ -1,2 +1,2 @@
 sh build.sh
-build/debug/lpp
+build/debug/lpp temp/test.c -o temp/out
