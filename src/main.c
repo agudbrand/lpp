@@ -856,20 +856,6 @@ stack_dump(lua_State* L) {
 	}
 }
 
-
-const char* reader(lua_State* L, void* data, size_t* size)
-{
-	dstr* s = data;
-	if (s->s)
-	{
-		*size = s->count;
-		dstr_destroy(s);
-		return (char*)s->s;
-	}
-	else 
-		return 0;
-}
-
 void load_metaprogram()
 {
 	if (luaL_loadbuffer(lpp.L, (char*)lpp.metaprogram.s, lpp.metaprogram.count, lpp.input_file_str))
@@ -912,8 +898,6 @@ int main(int argc, char** argv)
 	initialize_lua();
 	load_metaprogram();
 	run_metaprogram();
-	
-
 
 	return 0;
 }
