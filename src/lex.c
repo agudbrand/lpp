@@ -332,6 +332,7 @@ void lpp_lexer_run(Lexer* l)
 #define one_char_token(x, _kind) \
 		case x: {                \
 			t.kind = _kind;      \
+			advance(l);          \
 		} break;      
 #define one_or_two_char_token(x0, kind0, x1, kind1) \
 		case x0: {                                  \
@@ -384,6 +385,8 @@ void lpp_lexer_run(Lexer* l)
 			}                                                                    \
 		} break;                    
 
+
+	skip_whitespace(l);
 	while (!eof(l))
 	{
 		t.raw.s  = l->stream;
@@ -446,6 +449,19 @@ void lpp_lexer_run(Lexer* l)
 				}
 			} break;
 
+			case '"': {
+				s64 line = l->line;
+				s64 column = l->column;
+				advance(l);
+				while (!at(l, '"') && !eof(l)) advance(l);
+				if (eof(l))
+					fatal_error(lpp, line, column, "unexpected end of file while consuming string literal\n");
+				t.kind = tok_literal_string;
+				t.raw.s += 1;
+				t.raw.len = l->stream - t.raw.s;
+				advance(l);
+			} break;
+
 			default: {
 				// handle numbers, identifiers, and keywords
 				
@@ -493,7 +509,7 @@ void lpp_lexer_run(Lexer* l)
 				{
 					// must be either a keyword or identifier
 					if (!isalpha(current(l))) 
-						fatal_error(lpp, l->line, l->column, "invalid token");
+						fatal_error(lpp, l->line, l->column, "invalid token: '%c'\n", current(l));
 					
 					advance(l);
 					while (at_identifier_char(l) && !eof(l)) advance(l);
@@ -528,13 +544,14 @@ void lpp_lexer_run(Lexer* l)
 				while (!at(l, '`') && !eof(l)) advance(l);
 				if (eof(l))
 					fatal_error(lpp, l->line, l->column, "unexpected end of file while consuming lua block that began at %li:%li", line, column);
-				
 				t.raw.s += 1; // move away from the backtick
 				t.raw.len = l->stream - t.raw.s;
 				t.kind = tok_lpp_lua_block;
+				advance(l);
 			} break;
 		}
 		push_token(l, t);
+		skip_whitespace(l);
 	}
 }
 

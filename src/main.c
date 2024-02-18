@@ -17,7 +17,7 @@ void arg_error(const char* fmt, ...)
 
 int main(int argc, char** argv) 
 {
-	lppContext lpp;
+	lppContext lpp = {}; 
 
 	for (int i = 1; i < argc; i++) 
 	{
@@ -43,7 +43,7 @@ int main(int argc, char** argv)
 			if (lpp.input_file_name) // TODO(sushi) support multiple input files
 				arg_error("an input file has already been specified (%s); only one is supported for now!\n", lpp.input_file_name);
 
-			// this must be an input file 
+			// this must be an input file  
 			lpp.input_file_name = (u8*)arg;
 		}
 	}

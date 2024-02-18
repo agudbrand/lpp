@@ -1,5 +1,5 @@
 local M = {}
-
+ 
 do -- shallow copy the global table into the meta env
 	for k,v in pairs(_G) do
 		M[k] = v
@@ -19,12 +19,14 @@ end
 
 M.
 __VAL = function(x)
-	append_result(tostring(x))
+	append_result(tostring(x))   
 end
 
 M.
-__FINAL = function()
+__FINAL = function() 
 	return result
 end
+
+
 
 return M

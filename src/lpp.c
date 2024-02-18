@@ -174,6 +174,8 @@ stack_dump(lua_State* L) {
 	}
 }
 
+#include "metaenv.carray"
+
 //void load_metaprogram(lppContext* lpp)
 //{
 //	if (luaL_loadbuffer(lpp->L, (char*)lpp->metaprogram.s, lpp->metaprogram.count, lpp->input_file_name))
@@ -341,8 +343,34 @@ stack_dump(lua_State* L) {
 //	fprintf(stdout, "%.*s", mp->count, mp->s);
 //}
 
+void build_metprogram(lppContext* lpp)
+{
+	lpp->metaprogram = dstr_create(0);
+	dstr* mp = &lpp->metaprogram;
+
+	Lexer* l = &lpp->lexer;
+	
+	Token* tokens = l->tokens;
+	u64* lua_tokens = l->lua_tokens;
+
+	for (s32 i = 0; i < l->lua_token_count; i++)
+	{
+		u64 lua_token_idx = lua_tokens[i];
+		Token* lua_token = tokens + lua_token_idx;
+
+		if (lua_token_idx)
+		{
+
+		}
+		
+
+
+	}
+}
+
 void lpp_run(lppContext* lpp)
 {
+
 	FILE* input_file = fopen(lpp->input_file_name, "r");
 	if (!input_file)
 	{
@@ -362,7 +390,7 @@ void lpp_run(lppContext* lpp)
 		fatal_error(lpp, -1, -1, "failed to read input file\n");
 	}
 
-	FILE* output_file;
+	FILE* output_file; 
 
 	if (lpp->output_file_name)
 	{
@@ -377,6 +405,13 @@ void lpp_run(lppContext* lpp)
 		output_file = stdout;
 
 
-	lpp_lexer_init(lpp, &lpp->lexer, stream);
+	lpp_lexer_init(lpp, &lpp->lexer, input_buffer);
 	lpp_lexer_run(&lpp->lexer);
+	
+	
+
+	for (s32 i = 0; i < lpp->lexer.token_count; i++)
+	{
+		fprintf(stdout, "%i: %s\n", i, token_kind_strings[lpp->lexer.tokens[i].kind]);
+	}
 }
