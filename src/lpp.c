@@ -343,7 +343,45 @@ stack_dump(lua_State* L) {
 //	fprintf(stdout, "%.*s", mp->count, mp->s);
 //}
 
-void build_metprogram(lppContext* lpp)
+static void build_metac(dstr* x, str s)
+{
+	dstr_push_cstr(x, "__C(\"");
+	for (u32 i = 0; i < s.len; i++)
+	{
+		u8 c = s.s[i];
+		if (iscntrl(c))
+		{
+			dstr_push_char(x, '\\');
+			dstr_push_u8(x, c);
+		}
+		else if (c == '"')
+		{
+			dstr_push_char(x, '\\');
+			dstr_push_u8(x, '"');
+		}
+		else if (c == '\\')
+		{
+			dstr_push_char(x, '\\');
+			dstr_push_char(x, '\\');
+		}
+		else
+			dstr_push_char(x, c);
+	}
+	dstr_push_cstr(x, "\")\n");
+}
+
+static str consolidate_c_tokens(Token* start, Token* end)
+{
+	if (start == end) 
+		return start->raw;
+	
+	str out;
+	out.s = start->raw.s;
+	out.len = end->raw.s - out.s + end->raw.len;
+	return out;
+}
+
+static void build_metaprogram(lppContext* lpp)
 {
 	lpp->metaprogram = dstr_create(0);
 	dstr* mp = &lpp->metaprogram;
@@ -353,19 +391,38 @@ void build_metprogram(lppContext* lpp)
 	Token* tokens = l->tokens;
 	u64* lua_tokens = l->lua_tokens;
 
-	for (s32 i = 0; i < l->lua_token_count; i++)
+	// handle first edge case outside of loop
+	u64 first_idx = lua_tokens[0];
+	Token* first_lua_token = tokens + first_idx;
+
+	if (first_idx)
 	{
+		str c_str = consolidate_c_tokens(tokens, tokens + first_idx - 1);
+		build_metac(mp, c_str);
+	}
+
+	dstr_push_str(mp, first_lua_token->raw);
+	dstr_push_char(mp, '\n');
+
+	for (s32 i = 1; i < l->lua_token_count; i++)
+	{
+		u64 last_lua_token_idx = lua_tokens[i-1]; 
 		u64 lua_token_idx = lua_tokens[i];
 		Token* lua_token = tokens + lua_token_idx;
-
-		if (lua_token_idx)
-		{
-
-		}
 		
+		if (lua_token_idx != last_lua_token_idx + 1)
+		{
+			str c_str = consolidate_c_tokens(tokens + last_lua_token_idx + 1, lua_token - 1);
+			build_metac(mp, c_str);
+		}
 
-
+		dstr_push_str(mp, lua_token->raw);
+		dstr_push_char(mp, '\n');
 	}
+
+	dstr_push_cstr(mp, "io.write(__FINAL())\n");
+	
+	fprintf(stdout, "%.*s", mp->len, mp->s);
 }
 
 void lpp_run(lppContext* lpp)
@@ -414,4 +471,6 @@ void lpp_run(lppContext* lpp)
 	{
 		fprintf(stdout, "%i: %s\n", i, token_kind_strings[lpp->lexer.tokens[i].kind]);
 	}
+
+	build_metaprogram(lpp);
 }

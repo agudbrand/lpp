@@ -406,6 +406,7 @@ void lpp_lexer_run(Lexer* l)
 			one_char_token('#', tok_pound);
 			one_char_token(':', tok_colon);
 			one_char_token(';', tok_semicolon);
+			one_char_token('=', tok_equal);
 
 			one_or_two_char_token('+', tok_plus,             '=', tok_plus_equal);
 			one_or_two_char_token('*', tok_asterisk,         '=', tok_asterisk_equal);
@@ -543,7 +544,7 @@ void lpp_lexer_run(Lexer* l)
 				advance(l);
 				while (!at(l, '`') && !eof(l)) advance(l);
 				if (eof(l))
-					fatal_error(lpp, l->line, l->column, "unexpected end of file while consuming lua block that began at %li:%li", line, column);
+					fatal_error(lpp, l->line, l->column, "unexpected end of file while consuming lua block that began at %li:%li\n", line, column);
 				t.raw.s += 1; // move away from the backtick
 				t.raw.len = l->stream - t.raw.s;
 				t.kind = tok_lpp_lua_block;
