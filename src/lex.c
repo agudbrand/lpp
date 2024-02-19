@@ -107,17 +107,7 @@ kwmap_element kwmap_cpp[kwmap_def_cpp_size];
 
 b8 maps_initialized = 0;
 
-static u64 hash_string(str s)
-{
-	u64 seed = 14695981039;
-	while (s.len--)
-	{
-		seed ^= (u8)*s.s;
-		seed *= 1099511628211;
-		s.s += 1;
-	}
-	return seed;
-}
+
 
 typedef struct { u32 idx; b8 found; } kwmap_search_result;
 
@@ -261,20 +251,6 @@ static void advance3(Lexer* l)
 }
 
 /* ------------------------------------------------------------------------------------------------
- *  Helpers for advancing the stream.
- */
-static void skip_line(Lexer* l)
-{
-	while (!at(l, '\n') && !eof(l)) advance(l);
-	if (!eof(l)) advance(l);
-}
-
-static void skip_whitespace(Lexer* l)
-{
-	while(isspace(current(l))) advance(l);
-}
-
-/* ------------------------------------------------------------------------------------------------
  *  Logic for pushing tokens and such
  */
 static void grow_tokens_if_needed(Lexer* l)
@@ -296,14 +272,47 @@ static void push_token(Lexer* l, Token t)
 {
 	grow_tokens_if_needed(l);
 	l->tokens[l->token_count] = t;
-	if (t.kind == tok_lpp_lua_block)
+	switch (t.kind)
 	{
-		l->lua_tokens[l->lua_token_count] = l->token_count;
-		l->lua_token_count += 1;
+		case tok_lpp_lua_line:
+		case tok_lpp_lua_block:
+		case tok_lpp_lua_inline:
+		case tok_lpp_lua_macro: 
+		case tok_lpp_lua_macro_argument:{
+			l->lua_tokens[l->lua_token_count] = l->token_count;
+			l->lua_token_count += 1;
+		} break;
 	}
 	l->token_count += 1;
 }
 
+static void reset_token(Lexer* l, Token* t)
+{
+	t->raw.s  = l->stream;
+	t->line   = l->line;
+	t->column = l->column;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ *  Helpers for advancing the stream.
+ */
+static void skip_line(Lexer* l)
+{
+	while (!at(l, '\n') && !eof(l)) advance(l);
+	if (!eof(l)) advance(l);
+}
+
+static void skip_whitespace(Lexer* l, b8 make_token)
+{
+	Token t;
+	t.kind = tok_whitespace;
+	t.raw.s = l->stream;
+	t.line = l->line;
+	t.column = l->column;
+	while(isspace(current(l))) advance(l);
+	t.raw.len = l->stream - t.raw.s;
+	if (make_token) push_token(l, t);
+}
 
 /* ------------------------------------------------------------------------------------------------
  *
@@ -332,16 +341,19 @@ void lpp_lexer_run(Lexer* l)
 #define one_char_token(x, _kind) \
 		case x: {                \
 			t.kind = _kind;      \
+			t.raw.len = 1;       \
 			advance(l);          \
 		} break;      
 #define one_or_two_char_token(x0, kind0, x1, kind1) \
 		case x0: {                                  \
 			if (next_at(l, x1)) {                   \
 				t.kind = kind1;                     \
+				t.raw.len = 2;                      \
 				advance2(l);                        \
 			}                                       \
 			else {                                  \
 				t.kind = kind0;                     \
+				t.raw.len = 1;                      \
 				advance(l);                         \
 			}                                       \
 		} break;                                    
@@ -350,14 +362,17 @@ void lpp_lexer_run(Lexer* l)
 			switch (next(l)) {                                            \
 				case x1: {                                                \
 					t.kind = kind1;                                       \
+					t.raw.len = 2;                                        \
 					advance2(l);                                          \
 				} break;                                                  \
 				case x2: {                                                \
 					t.kind = kind2;                                       \
+					t.raw.len = 2;                                        \
 					advance2(l);                                          \
 				} break;                                                  \
 				default: {                                                \
 					t.kind = kind0;                                       \
+					t.raw.len = 1;                                        \
 					advance(l);                                           \
 				} break;                                                  \
 			}                                                             \
@@ -366,32 +381,34 @@ void lpp_lexer_run(Lexer* l)
 		case x0: {                                                               \
 			switch (next(l)) {                                                   \
 				case x1: {                                                       \
+					t.raw.len = 2;                                               \
 					t.kind = kind1;                                              \
 					advance2(l);                                                 \
 				} break;                                                         \
 				case x2: {                                                       \
 					if (nextnext(l) == x3) {                                     \
+						t.raw.len = 3;                                           \
 						t.kind = kind3;                                          \
 						advance3(l);                                             \
 					} else {                                                     \
+						t.raw.len = 2;                                           \
 						t.kind = kind2;                                          \
 						advance2(l);                                             \
 					}                                                            \
 				} break;                                                         \
 				default: {                                                       \
 					t.kind = kind0;                                              \
+					t.raw.len = 1;                                               \
 					advance(l);                                                  \
 				} break;                                                         \
 			}                                                                    \
 		} break;                    
 
 
-	skip_whitespace(l);
+	skip_whitespace(l, 1);
 	while (!eof(l))
 	{
-		t.raw.s  = l->stream;
-		t.line   = l->line;
-		t.column = l->column;
+		reset_token(l, &t);
 
 		switch (current(l))
 		{
@@ -407,6 +424,7 @@ void lpp_lexer_run(Lexer* l)
 			one_char_token(':', tok_colon);
 			one_char_token(';', tok_semicolon);
 			one_char_token('=', tok_equal);
+			one_char_token('.', tok_period);
 
 			one_or_two_char_token('+', tok_plus,             '=', tok_plus_equal);
 			one_or_two_char_token('*', tok_asterisk,         '=', tok_asterisk_equal);
@@ -442,11 +460,13 @@ void lpp_lexer_run(Lexer* l)
 				{
 					t.raw.len = 2;
 					t.kind = tok_slash_equal;
+					advance2(l);
 				}
 				else
 				{
 					t.raw.len = 1;
 					t.kind = tok_slash;
+					advance(l);
 				}
 			} break;
 
@@ -538,21 +558,114 @@ void lpp_lexer_run(Lexer* l)
 			/* -------------------------------------------
 			 *  lpp syntax
 			 */
+			case '$': {
+				advance(l);
+				s64 line = l->line;
+				s64 column = l->column;
+				skip_whitespace(l, 0);
+				if (at(l, '{'))
+				{
+					u64 nesting = 1;
+					t.raw.s += l->stream - t.raw.s + 1; // move past the { 
+					advance(l);
+					while (!eof(l))
+					{	
+						advance(l);
+						if (at(l, '}'))
+						{
+							nesting -= 1;
+							if (!nesting) break;
+						}
+						else if(at(l, '{'))
+							nesting += 1;
+					}
+					if (eof(l))
+						fatal_error(lpp, line, column, "unexpected end of file while consuming lua block\n");
+                    t.raw.len = l->stream - t.raw.s;
+					t.kind = tok_lpp_lua_block;
+					advance(l);
+				}
+				else
+				{
+					if (line != l->line)
+						warning(lpp, line, column, "empty lua line");
+					else
+						skip_line(l);
+					t.raw.s += 1;
+					t.raw.len = l->stream - t.raw.s;
+					t.kind = tok_lpp_lua_line;
+				}
+			} break;
+
 			case '`': {
 				s64 line = l->line;
 				s64 column = l->column;
 				advance(l);
 				while (!at(l, '`') && !eof(l)) advance(l);
 				if (eof(l))
-					fatal_error(lpp, l->line, l->column, "unexpected end of file while consuming lua block that began at %li:%li\n", line, column);
+					fatal_error(lpp, line, column, "unexpected end of file while consuming inline lua\n");
 				t.raw.s += 1; // move away from the backtick
 				t.raw.len = l->stream - t.raw.s;
-				t.kind = tok_lpp_lua_block;
+				t.kind = tok_lpp_lua_inline;
 				advance(l);
+			} break;
+
+			case '@': {
+				s64 line = l->line;
+				s64 column = l->column;
+				advance(l);
+				skip_whitespace(l, 0);
+				if (!at_identifier_char(l))
+					fatal_error(lpp, l->line, l->column, "token following a lua macro (@) must be an identifier of a lua function\n");
+				while (at_identifier_char(l) && !eof(l)) advance(l);
+				if (eof(l))
+					fatal_error(lpp, l->line, l->column, "unexpected end of file while consuming lua macro\n");
+
+				// finish the macro token
+				t.kind = tok_lpp_lua_macro;
+				t.raw.s += 1;
+				t.raw.len = l->stream - t.raw.s;
+				push_token(l, t);
+
+				skip_whitespace(l, 0);
+
+				if (at(l, '('))
+				{
+					advance(l);
+					// turn each argument into a arg token
+					while (!eof(l))
+					{	
+						skip_whitespace(l, 0);
+						reset_token(l, &t);
+						while (!at(l, ',') && !at(l, ')') && !eof(l)) advance(l);
+						if (eof(l))
+							fatal_error(lpp, line, column, "unexpected end of file while consuming lua macro arguments\n");
+						t.raw.len = l->stream - t.raw.s;
+						t.kind = tok_lpp_lua_macro_argument;
+						b8 quit = at(l, ')');
+						advance(l);
+						if (quit)
+							break;
+						else
+							push_token(l, t);
+					}
+				}
+				else if (at(l, '"'))
+				{
+					advance(l);
+					reset_token(l, &t);
+					while(!at(l, '"') && !eof(l)) advance(l);
+					if (eof(l))
+						fatal_error(lpp, line, column, "unexpected end of file while consume lua string macro arg\n");
+
+					t.raw.len = l->stream - t.raw.s;
+					t.kind = tok_lpp_lua_macro_argument;
+					advance(l);
+				}
 			} break;
 		}
 		push_token(l, t);
-		skip_whitespace(l);
+		skip_whitespace(l, 1);
 	}
 }
 

@@ -10,6 +10,18 @@ b8 isempty(str s)
 	return 1;
 }
 
+u64 hash_string(str s)
+{
+	u64 seed = 14695981039;
+	while (s.len--)
+	{
+		seed ^= (u8)*s.s;
+		seed *= 1099511628211;
+		s.s += 1;
+	}
+	return seed;
+}
+
 void* memory_reallocate(void* ptr, u64 n_bytes)
 {
 	return realloc(ptr, n_bytes);
@@ -57,7 +69,7 @@ static void dstr_grow_if_needed(dstr* x, s32 bytes)
 	if (x->len + bytes <= x->space)
 		return;
 
-	TRACE("grow by %i\n", bytes);
+	// TRACE("grow by %i\n", bytes);
 
 	while(x->space < x->len + bytes) x->space *= 2;
 	x->s = memory_reallocate(x->s, x->space);
@@ -84,6 +96,15 @@ void dstr_push_u8(dstr* x, u8 c)
 {
 	char buf[3];
 	s32 n = snprintf(buf, 3, "%u", c);
+	dstr_grow_if_needed(x, n);
+	memory_copy(x->s + x->len, buf, n);
+	x->len += n;
+}
+
+void dstr_push_s64(dstr* x, s64 c)
+{
+	char buf[21];
+	s32 n = snprintf(buf, 21, "%li", c);
 	dstr_grow_if_needed(x, n);
 	memory_copy(x->s + x->len, buf, n);
 	x->len += n;

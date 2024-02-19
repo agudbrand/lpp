@@ -109,6 +109,8 @@ print_lua_value(lua_State* L, int idx) {
 		case LUA_TBOOLEAN: printf(lua_toboolean(L, idx) ? "true" : "false"); return;
 		case LUA_TTHREAD: printf("<lua thread>"); return;
 		case LUA_TFUNCTION: printf("<lua function>"); return;
+		case LUA_TLIGHTUSERDATA:
+		case LUA_TUSERDATA: printf("%p", lua_touserdata(L, idx)); return;
 		default: {
 			printf("unhandled lua type in lua_to_str8: %s", lua_typename(L, t));
 		} break;
@@ -343,6 +345,32 @@ stack_dump(lua_State* L) {
 //	fprintf(stdout, "%.*s", mp->count, mp->s);
 //}
 
+typedef struct TokenReturn {
+	char* raw_str;
+	int   raw_len;
+
+	TokenKind kind;
+
+	int line;
+	int column;
+	char* file_name;
+} TokenReturn;
+
+TokenReturn get_token(lppContext* lpp, int idx)
+{
+	TokenReturn out = {};
+
+	Token t = lpp->lexer.tokens[idx];
+	out.raw_str = t.raw.s;
+	out.raw_len = t.raw.len;
+	out.file_name = lpp->input_file_name;
+	out.kind = t.kind;
+	out.line = t.line;
+	out.column = t.column;
+
+	return out;
+}
+
 static void build_metac(dstr* x, str s)
 {
 	dstr_push_cstr(x, "__C(\"");
@@ -381,6 +409,50 @@ static str consolidate_c_tokens(Token* start, Token* end)
 	return out;
 }
 
+static void build_metalua(lppContext* lpp, dstr* x, Token* lua_token)
+{
+	dstr_push_cstr(x, "__TOKENCONTEXT(");
+	dstr_push_s64(x, lua_token - lpp->lexer.tokens);
+	dstr_push_cstr(x, ")\n");
+
+	switch (lua_token->kind)
+	{
+		case tok_lpp_lua_inline: {
+			dstr_push_cstr(x, "__VAL(");
+			dstr_push_str(x, lua_token->raw);
+			dstr_push_cstr(x, ")\n");
+		} break;
+
+		case tok_lpp_lua_line:
+		case tok_lpp_lua_block: {
+			dstr_push_str(x, lua_token->raw);
+			dstr_push_char(x, '\n');
+		} break;
+
+		case tok_lpp_lua_macro: {
+			dstr_push_cstr(x, "__C(");
+			dstr_push_cstr(x, "__MACRO(");
+			dstr_push_str(x, lua_token->raw);
+			dstr_push_char(x, '(');
+			lua_token += 1;
+			for (;;)
+			{
+				dstr_push_char(x, '"');
+				dstr_push_str(x, lua_token->raw);
+				dstr_push_char(x, '"');
+				if ((lua_token + 1)->kind != tok_lpp_lua_macro_argument)
+					break;
+				dstr_push_char(x, ',');
+				lua_token += 1;
+			}
+			dstr_push_cstr(x, ")))\n");
+		} break;
+
+		default: 
+			fatal_error(lpp, lua_token->line, lua_token->column, "INTERNAL ERROR: non-lua token passed to build_metalua()\n");
+	}
+}
+
 static void build_metaprogram(lppContext* lpp)
 {
 	lpp->metaprogram = dstr_create(0);
@@ -401,28 +473,87 @@ static void build_metaprogram(lppContext* lpp)
 		build_metac(mp, c_str);
 	}
 
-	dstr_push_str(mp, first_lua_token->raw);
-	dstr_push_char(mp, '\n');
+	build_metalua(lpp, mp, first_lua_token);
 
 	for (s32 i = 1; i < l->lua_token_count; i++)
 	{
 		u64 last_lua_token_idx = lua_tokens[i-1]; 
 		u64 lua_token_idx = lua_tokens[i];
 		Token* lua_token = tokens + lua_token_idx;
-		
+
+		if (lua_token->kind == tok_lpp_lua_macro_argument) 
+			continue; // these are handled by the macro token, so just skip them
+
 		if (lua_token_idx != last_lua_token_idx + 1)
 		{
 			str c_str = consolidate_c_tokens(tokens + last_lua_token_idx + 1, lua_token - 1);
 			build_metac(mp, c_str);
 		}
 
-		dstr_push_str(mp, lua_token->raw);
-		dstr_push_char(mp, '\n');
+		build_metalua(lpp, mp, lua_token);
 	}
 
-	dstr_push_cstr(mp, "io.write(__FINAL())\n");
-	
-	fprintf(stdout, "%.*s", mp->len, mp->s);
+	s32 remaining_c_tokens = l->token_count - lua_tokens[l->lua_token_count-1];
+
+	if (remaining_c_tokens)
+	{
+		str c_str = consolidate_c_tokens(tokens + lua_tokens[l->lua_token_count-1]+1, tokens + l->token_count-1);
+		build_metac(mp, c_str);
+	}
+
+	dstr_push_cstr(mp, "return __FINAL()\n");
+}
+
+static void load_metaprogram(lppContext* lpp)
+{
+	lua_State* L = lpp->L;
+	if (luaL_loadbuffer(L, (char*)lpp->metaprogram.s, lpp->metaprogram.len, lpp->input_file_name))
+	{
+		fprintf(stdout, "%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+
+	if (luaL_loadbuffer(L, src_metaenv_lua, src_metaenv_lua_len, "meta environment"))
+	{
+		fprintf(stdout, "Failed to load metaenv:\n%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+
+	if (lua_pcall(L, 0, 1, 0))
+	{
+		fprintf(stdout, "Failed to run metaenv:\n%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+
+	// set the context pointer 
+	lua_pushstring(L, "__LPP"); 
+	lua_gettable(L, -2);
+	lua_pushstring(L, "context");
+	lua_pushlightuserdata(L, lpp);
+	lua_settable(L, -3);
+	lua_pop(L, 1);
+
+	if (!lua_setfenv(L, 1))
+	{
+		fprintf(stdout, "Failed to set environment of metaprogram:\n%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+}
+
+static void run_metaprogram(lppContext* lpp)
+{
+	lua_State* L = lpp->L;
+
+	if (lua_pcall(L, 0, 1, 0))
+	{
+		fprintf(stdout, "Metaprogram failed:\n%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
 }
 
 void lpp_run(lppContext* lpp)
@@ -465,12 +596,19 @@ void lpp_run(lppContext* lpp)
 	lpp_lexer_init(lpp, &lpp->lexer, input_buffer);
 	lpp_lexer_run(&lpp->lexer);
 	
-	
-
 	for (s32 i = 0; i < lpp->lexer.token_count; i++)
-	{
-		fprintf(stdout, "%i: %s\n", i, token_kind_strings[lpp->lexer.tokens[i].kind]);
+    {
+		fprintf(stdout, "%i: %s: %.*s\n", i, token_kind_strings[lpp->lexer.tokens[i].kind], lpp->lexer.tokens[i].raw.len, lpp->lexer.tokens[i].raw.s);
 	}
 
 	build_metaprogram(lpp);
+
+	initialize_lua(lpp);
+	load_metaprogram(lpp);
+		
+	// fprintf(stdout, "%.*s\n", lpp->metaprogram.len, lpp->metaprogram.s);
+
+	run_metaprogram(lpp);
+
+	fprintf(output_file, "%s\n", lua_tostring(lpp->L, -1));
 }

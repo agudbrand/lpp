@@ -43,6 +43,7 @@ typedef struct str
  *	str utils
  */
 b8 isempty(str s);
+u64 hash_string(str s);
 
 /* ----------------------------------------------
  *	Memory wrappers in case I ever want to alter
@@ -70,6 +71,7 @@ void dstr_push_str(dstr* x, str s);
 // pushs the STRING reprentation of 
 // 'c' to the dstr, not the character c
 void dstr_push_u8(dstr* x, u8 c);
+void dstr_push_s64(dstr* x, s64 c);
 void dstr_push_char(dstr* x, u8 c);
 
 #endif // _lpp_common_h
