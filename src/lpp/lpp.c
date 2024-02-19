@@ -84,18 +84,6 @@ static void initialize_lua(lppContext* lpp)
 	luaL_openlibs(lpp->L);
 }
 
-//b8 luacall(u32 n_returns)
-//{
-//	if (lua_pcall(lpp->L, 0, n_returns, 0))
-//	{
-//		error("%s\n", lua_tostring(lpp->L, -1));
-//		lua_pop(lpp->L, 1);
-//		return 0;
-//	}
-//
-//	return 1;
-//}
-
 void
 print_lua_value(lua_State* L, int idx) {
 	int t = lua_type(L, idx);
@@ -176,174 +164,7 @@ stack_dump(lua_State* L) {
 	}
 }
 
-#include "metaenv.carray"
-
-//void load_metaprogram(lppContext* lpp)
-//{
-//	if (luaL_loadbuffer(lpp->L, (char*)lpp->metaprogram.s, lpp->metaprogram.count, lpp->input_file_name))
-//	{
-//		fprintf(stdout, "%s\n", lua_tostring(lpp->L, -1));
-//		lua_pop(lpp->L, 1);
-//		return;
-//	}
-//#define METAPROG_IDX 1
-//
-//	// TODO(sushi) replace with C array 
-//	//             xxd -i src/metaenv.lua
-//	if (luaL_loadfile(lpp->L, "src/metaenv.lua"))
-//	{
-//		fprintf(stdout, "%s\n", lua_tostring(lpp->L, -1));
-//		lua_pop(lpp->L, 1);
-//		return;
-//	}
-//
-//	if (!luacall(1))
-//		fatal_error("metaenv failed to run\n");
-//
-//	if (!lua_setfenv(lpp->L, METAPROG_IDX))
-//		fatal_error("failed to set environment of metaprogram");
-//}
-//
-//void run_metaprogram()
-//{
-//	luacall(0);	
-//}
-
-//static void build_metaprogram(lppContext* lpp)
-//{
-//	lpp->metaprogram = dstr_create(0);
-//	dstr* mp = &lpp->metaprogram;
-//
-//	for (u32 i = 0; i < lpp->n_parts; i++)
-//	{
-//		Part* p = lpp->parts + i;
-//		
-//		switch (p->type)
-//		{
-//			case PartType_LuaLine:
-//			case PartType_LuaBlock:
-//				dstr_push_str(mp, p->s);
-//				dstr_push_char(mp, '\n');
-//			break;
-//			case PartType_LuaValue:
-//				dstr_push_cstr(mp, "__VAL(");
-//				dstr_push_str(mp, p->s);
-//				dstr_push_cstr(mp, ")\n");
-//			break;
-//			case PartType_LuaMacro:
-//			{
-//				dstr_push_cstr(mp, "__C(");
-//
-//				lpp->cursor = p->s.s;
-//
-//				str name;
-//				name.s = lpp->cursor;
-//
-//				while (!at('(') && !isspace(current())) advance();
-//
-//				name.count = lpp->cursor - name.s;
-//
-//				dstr_push_str(mp, name);
-//				dstr_push_char(mp, '(');
-//
-//				if (!at('(')) while (!at('(')) advance();
-//				advance();
-//
-//				str arg;
-//
-//				u32 nesting = 1;
-//				while (!eof())
-//				{
-//					skip_whitespace();
-//					arg.s = lpp->cursor;
-//					
-//					while (!at(','))
-//					{
-//						if (at(')')) 
-//						{
-//							nesting -= 1;
-//							if (!nesting) break;
-//						}
-//						else if (at('(')) nesting += 1;
-//						advance();
-//					}
-//
-//					arg.count = lpp->cursor - arg.s;
-//					dstr_push_char(mp, '"');
-//					dstr_push_str(mp, arg);
-//					dstr_push_char(mp, '"');
-//
-//					if (at(')')) break;
-//
-//					dstr_push_cstr(mp, ",");
-//					advance();
-//				}
-//
-//				dstr_push_cstr(mp, "))\n");
-//			}
-//			break;
-//			case PartType_LuaMacroStringed:
-//			{
-//				dstr_push_cstr(mp, "__C(");
-//
-//				lpp->cursor = p->s.s;
-//
-//				str name;
-//				name.s = lpp->cursor;
-//
-//				while (!at('"') && !isspace(current())) advance();
-//
-//				name.count = lpp->cursor - name.s;
-//
-//				dstr_push_str(mp, name);
-//				dstr_push_char(mp, '(');
-//
-//				str arg;
-//
-//				if (!at('"')) skip_whitespace();
-//				arg.s = lpp->cursor;
-//				advance();
-//				while (!at('"')) advance();
-//				advance();
-//
-//				arg.count = lpp->cursor - arg.s;
-//				dstr_push_str(mp, arg);
-//				dstr_push_cstr(mp, "))\n");
-//			}
-//			break;
-//			case PartType_C:
-//				dstr_push_cstr(mp, "__C(\"");
-//				// need to sanitize
-//				for (u32 i = 0; i < p->s.count; i++) 
-//				{
-//					u8 c = p->s.s[i];
-//					if (iscntrl(c))
-//					{
-//						dstr_push_char(mp, '\\');
-//						dstr_push_u8(mp, c);
-//					}
-//					else if (c == '"')
-//					{
-//						dstr_push_char(mp, '\\');
-//						dstr_push_u8(mp, '"');
-//					}
-//					else if (c == '\\')
-//					{
-//						dstr_push_char(mp, '\\');
-//						dstr_push_char(mp, '\\');
-//					}
-//					else 
-//						dstr_push_char(mp, c);
-//				}
-//				dstr_push_cstr(mp, "\")\n");
-//			break;
-//		}
-//	}
-//
-//	dstr_push_cstr(mp, "io.write(__FINAL())\n");
-//
-//	fprintf(stdout, "%.*s", mp->count, mp->s);
-//}
+#include "generated/metaenv.h"
 
 typedef struct TokenReturn {
 	char* raw_str;
@@ -514,7 +335,7 @@ static void load_metaprogram(lppContext* lpp)
 		return;
 	}
 
-	if (luaL_loadbuffer(L, src_metaenv_lua, src_metaenv_lua_len, "meta environment"))
+	if (luaL_loadbuffer(L, metaenv_bytes, metaenv_byte_count, "meta environment"))
 	{
 		fprintf(stdout, "Failed to load metaenv:\n%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);

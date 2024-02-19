@@ -20,13 +20,13 @@ typedef struct lppContext
 
 	b8 use_color;
 	b8 cpp; // if we need to consider cpp in lexing
-
+ 
 	dstr metaprogram;
 
 	Lexer lexer;
 
 	lua_State* L;
-} lppContext;
+} lppContext; 
 
 void lpp_run(lppContext* lpp);
 
@@ -37,6 +37,6 @@ void lpp_run(lppContext* lpp);
 // does not return
 void fatal_error(lppContext* lpp, s64 line, s64 column, const char* fmt, ...);
 void error(lppContext* lpp, s64 line, s64 column, const char* fmt, ...);
-void warning(lppContext* lpp, s64 line, s64 column, const char* fmt, ...);
-
+void warning(lppContext* lpp, s64 line, s64 column, const char* fmt, ...); 
+  
 #endif // _lpp_lpp_h
