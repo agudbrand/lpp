@@ -1,6 +1,15 @@
+-- [[
+--     Definition of the meta-environment. 
+--     This is the environment that a lua metaprogram will execute in. 
+-- ]]
 
+-- Define our interface to C.
 local ffi = require "ffi"
+-- TODO(sushi) replace a lot of this by preprocessing common.h 
+--             and just loading it into ffi from the C code
 ffi.cdef [[
+    enum TokenKind;
+
     typedef struct TokenReturn {
         char* raw_str;
         int   raw_len;
@@ -13,27 +22,73 @@ ffi.cdef [[
     } TokenReturn;
 
 	TokenReturn get_token(void* ctx, int idx);
+
+    TokenKind string_to_tokenkind(u64 hash)
+
+    typedef struct str {
+        char* s;
+        int32_t len; 
+    } str;
+
+    uint64_t hash_string(str s)
 ]]
 local C = ffi.C
 
-local M = {}   
+local strtype = ffi.typeof("str")
 
-local __LPP = {}
-M.__LPP = __LPP
+ffi.metatype("TokenKind", {
+    __eq = function(lhs, rhs)
+        if type(rhs) == "string" then
+            local kind = C.string_to_tokenkind(C.hash_string(strtype(rhs, #rhs)))
+            return lhs == kind
+        elseif type(rhs) == "number" then
+            return lhs == rhs
+        else
+            error("== with a Token only supports strings and numbers!", 2)
+        end
+    end
+})
 
-do -- shallow copy the global table into the meta env
-	for k,v in pairs(_G) do
-		M[k] = v
-	end
-end
+-- The metaenvironment table.
+-- All things in this table are accessible as 
+-- global things from within the metaprogram.
+local M = {}
 
+-- Shallow copy the global table into the meta env. 
+for k,v in pairs(_G) do
+    M[k] = v
+end 
+
+-- Table storing functions for interacting 
+-- with lpp from within a metaprogram
+-- eg. 
+-- __LPP.next_token()
+M.__LPP = {}
+
+
+-- [[
+--     Vars used to track internal 
+--     state of the metaprogram.
+-- ]]
+
+
+-- The buffer in which the final C program is 
+-- constructed.
+-- TODO(sushi) make this a luajit string buffer 
 local result = ""
+-- The index of the current token at any point
+-- in the metaprogram. This is 
 local tok_idx = 0
-local token_array = {}
 
-__LPP.
+
+-- [[
+--     __LPP functions
+-- ]]
+
+
+M.__LPP.
 current_token = function()
-	local tok = C.get_token(__LPP.context, tok_idx)
+	local tok = C.get_token(M.__LPP.context, tok_idx)
 	local out = {}
 	out.file_name = ffi.string(tok.file_name)
 	out.kind = tok.kind
@@ -43,19 +98,34 @@ current_token = function()
 	return out
 end
 
-__LPP.
+M.__LPP.
 next_token = function()
-	tok_idx = tok_idx + 1
-	return __LPP.current_token()
+    while true do
+        tok_idx = tok_idx + 1
+        local tok = M.__LPP.current_token()
+        if tok.kind ~= "comment" and tok.kind ~= "whitespace" then
+            return tok
+        elseif tok.kind == 0 then
+            return nil
+        end
+    end
 end
 
 local function append_result(s)
-	if type(s) ~= "string" then
+	if type(s) ~= "string" then 
 		error("append_result() got "..type(s).." instead of a string!", 3)
 	end
 
 	result = result .. s
 end
+
+
+-- [[
+--    Metaenvironment functions.
+--    These are directly accessible by the metaprogram
+--    and should not be overwritten by it.
+-- ]]
+
 
 M.
 __C = function(str)
@@ -65,9 +135,9 @@ end
 M.
 __VAL = function(x)
 	append_result(tostring(x))
-end 
+end
 
-M.
+M. 
 __FINAL = function()
 	return result
 end

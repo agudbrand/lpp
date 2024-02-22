@@ -1,3 +1,14 @@
+-- the token enum
+local enum_header_path    = "src/generated/token.enum.h"
+-- mapping of keyword string hashes to token kinds for
+-- use by the lexer
+local map_header_path     = "src/generated/token.map.h"
+-- array of strings indexable by TokenKind
+local strings_header_path = "src/generated/token.strings.h"
+-- a mapping of strings to token kinds for use in metaprograms.
+-- this is what allows us to do token.kind == "..."
+local string_mapping_path = "src/generated/tokens.stringmap.h"
+
 -- load common hashing function
 local ffi = require "ffi"
 ffi.cdef [[
@@ -170,8 +181,6 @@ local tokens_punctuation = {
 	{"tilde_equal",              "~=" },
 }
 
---	lpp tokens
-
 local tokens_lpp = {
 	"lpp_lua_line",
 	"lpp_lua_block",
@@ -180,10 +189,20 @@ local tokens_lpp = {
 	"lpp_lua_macro_argument",
 }
 
--- generate enum
+
+-- [[
+--
+--		Generate enum header
+--
+-- ]]
+
 
 local header = [[
+#ifndef _lpp_generated_token_enum_h
+#define _lpp_generated_token_enum_h
+
 typedef enum {
+	tok_NULL = 0,
 ]]
 
 for _,v in ipairs(tokens_varlen) do
@@ -213,11 +232,34 @@ end
 header = header..[[
 } TokenKind;
 
+#endif // _lpp_generated_token_enum_h
 ]]
 
--- generate hashmaps
+local enum_header = io.open(enum_header_path, "w")
+
+if not enum_header then
+	error("failed to open enum header at path '"..enum_header_path.."'")
+end
+
+enum_header:write(header)
+enum_header:close()
+
+
+-- [[
+--
+--		Generate keyword maps header
+--
+-- ]]
+
+
+header = ""
 
 header = header..[[
+#ifndef _lpp_generated_token_map_h
+#define _lpp_generated_token_map_h
+
+#include "common.h"
+
 typedef struct kwvk 
 {
     u64 key;
@@ -233,14 +275,14 @@ local strtype = ffi.typeof("str")
 for _,v in ipairs(tokens_c_keywords) do
     header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."},\n"
 end
- 
+
 for _,v in ipairs(tokens_c_new_keywords) do
     header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."},\n"
 end
 
 header = header..[[
 };
-static const u64 kwmap_c_count = ]]..#tokens_c_keywords+#tokens_c_new_keywords..[[;
+static const u64 kwmap_c_count = sizeof(kwmap_c)/sizeof(kwmap_c[0]);
 
 static const kwvk kwmap_cpp[] =
 {
@@ -252,13 +294,132 @@ end
 
 header = header..[[
 };
-static const u64 kwmap_cpp_count = ]]..#tokens_cpp_keywords..";"
+static const u64 kwmap_cpp_count = sizeof(kwmap_cpp)/sizeof(kwmap_cpp[0]);
 
-local f = io.open("src/generated/tokens.h", "w")
+#endif // _lpp_generated_token_map_h
+]]
 
-if not f then
-    error("failed to open 'src/generated/tokens.h'")
+local map_header = io.open(map_header_path, "w")
+
+if not map_header then
+    error("failed to open map header for writing at '"..map_header_path.."'")
 end
 
-f:write(header)
-f:close()
+map_header:write(header)
+map_header:close()
+
+
+-- [[
+--
+--		Generate strings header
+--
+-- ]]
+
+
+header = [[
+#ifndef _lpp_generated_token_strings_h
+#define _lpp_generated_token_strings_h
+
+static const char* token_strings[] =
+{
+]]
+
+for _,v in ipairs(tokens_varlen) do
+    header = header.."\t\""..v.."\",\n"
+end
+
+for _,v in ipairs(tokens_c_keywords) do
+    header = header.."\t\""..v.."\",\n"
+end
+
+for _,v in ipairs(tokens_c_new_keywords) do
+    header = header.."\t\""..v.."\",\n"
+end
+
+for _,v in ipairs(tokens_cpp_keywords) do
+    header = header.."\t\""..v.."\",\n"
+end
+
+for _,v in ipairs(tokens_punctuation) do
+    header = header.."\t\""..v[1].."\",\n"
+end
+
+for _,v in ipairs(tokens_lpp) do
+    header = header.."\t\""..v.."\",\n"
+end
+
+header = header..[[
+};
+
+#endif // _lpp_generated_token_strings_h
+]]
+
+local strings_header = io.open(strings_header_path, "w")
+
+if not strings_header then
+	error("failed to open strings header for writing at '"..strings_header_path.."'")
+end
+
+strings_header:write(header)
+strings_header:close()
+
+
+-- [[
+--
+--		Generate string mapping
+--
+-- ]]
+
+
+header = [[
+#ifndef _lpp_generated_token_string_map_h
+#define _lpp_generated_token_string_map_h
+
+#include "common.h"
+#include "token.enum.h"
+
+typedef struct strtoken {
+	u64 key;
+	TokenKind kind;
+} strtoken;
+
+static const strtoken strtokenmap[] =
+{
+]]
+
+for _,v in ipairs(tokens_varlen) do
+    header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."}, \n"
+end
+
+for _,v in ipairs(tokens_c_keywords) do
+    header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."},\n"
+end
+
+for _,v in ipairs(tokens_c_new_keywords) do
+    header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."},\n"
+end
+
+for _,v in ipairs(tokens_cpp_keywords) do
+    header = header.."\t{"..tostring(C.hash_string(strtype(v, #v)))..", ".."tok_"..v.."},\n"
+end
+
+for _,v in ipairs(tokens_punctuation) do
+    header = header.."\t{"..tostring(C.hash_string(strtype(v[1], #v[1])))..", ".."tok_"..v[1].."},\n"
+    header = header.."\t{"..tostring(C.hash_string(strtype(v[1], #v[2])))..", ".."tok_"..v[1].."},\n"
+end
+
+header = header..[[
+};
+static const u64 strtokenmap_len = sizeof(strtokenmap)/sizeof(strtokenmap[0]);
+
+#endif // _lpp_generated_token_string_map_h
+]]
+
+local string_mapping_header = io.open(string_mapping_path, "w")
+
+if not string_mapping_header then
+	error("failed to open string mapping header for writing at '"..string_mapping_path.."'")
+end
+
+string_mapping_header:write(header)
+string_mapping_header:close()

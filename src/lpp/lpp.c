@@ -10,6 +10,79 @@
 #include "string.h"
 #include "ctype.h"
 
+#include "generated/token.strings.h"
+#include "generated/tokens.stringmap.h"
+
+/* ------------------------------------------------------------------------------------------------
+ *	Functions used by the metaprogram.
+ */
+
+TokenKind string_to_tokenkind(u64 hash)
+{
+	s32 index = -1;
+	s32 found = 0;
+
+	s32 l = 0, m = 0, r = strtokenmap_len - 1;
+	while (l <= r)
+	{
+		m = l+(r-l)/2;
+skip_middle_set:;
+		u64 key = strtokenmap[m].key;
+		if (key == hash)
+		{
+			index = m;
+			found = 1;
+			break;
+		}
+		else if (key < hash)
+		{
+			l = m+1;
+			if (l>r) break;
+			m = l+(r-l)/2;
+			goto skip_middle_set;
+		} 
+		else 
+		{
+			r = m-1;
+		}
+	}
+	
+	if (!found) return tok_NULL;
+	return strtokenmap[index].kind;
+}
+
+typedef struct TokenReturn {
+	char* raw_str;
+	int   raw_len;
+
+	TokenKind kind;
+
+	int line;
+	int column;
+	char* file_name;
+} TokenReturn;
+
+TokenReturn get_token(lppContext* lpp, int idx)
+{
+	TokenReturn out = {};
+
+	if (idx > lpp->lexer.token_count) 
+	{
+		out.kind = tok_NULL;
+		return out;
+	}
+
+	Token t = lpp->lexer.tokens[idx];
+	out.raw_str = t.raw.s;
+	out.raw_len = t.raw.len;
+	out.file_name = lpp->input_file_name;
+	out.kind = t.kind;
+	out.line = t.line;
+	out.column = t.column;
+
+	return out;
+}
+
 // pretty terminal colors
 typedef enum 
 { 
@@ -165,32 +238,6 @@ stack_dump(lua_State* L) {
 }
 
 #include "generated/metaenv.h"
-
-typedef struct TokenReturn {
-	char* raw_str;
-	int   raw_len;
-
-	TokenKind kind;
-
-	int line;
-	int column;
-	char* file_name;
-} TokenReturn;
-
-TokenReturn get_token(lppContext* lpp, int idx)
-{
-	TokenReturn out = {};
-
-	Token t = lpp->lexer.tokens[idx];
-	out.raw_str = t.raw.s;
-	out.raw_len = t.raw.len;
-	out.file_name = lpp->input_file_name;
-	out.kind = t.kind;
-	out.line = t.line;
-	out.column = t.column;
-
-	return out;
-}
 
 static void build_metac(dstr* x, str s)
 {
@@ -368,6 +415,13 @@ static void load_metaprogram(lppContext* lpp)
 static void run_metaprogram(lppContext* lpp)
 {
 	lua_State* L = lpp->L;
+	if (luaL_loadfile(L, "temp/test.lua") || lua_pcall(L, 0,0,0))
+	{
+		fprintf(stdout, "test failed:\n%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+
 
 	if (lua_pcall(L, 0, 1, 0))
 	{
@@ -419,14 +473,14 @@ void lpp_run(lppContext* lpp)
 	
 	for (s32 i = 0; i < lpp->lexer.token_count; i++)
     {
-		fprintf(stdout, "%i: %s: %.*s\n", i, token_kind_strings[lpp->lexer.tokens[i].kind], lpp->lexer.tokens[i].raw.len, lpp->lexer.tokens[i].raw.s);
+		 // fprintf(stdout, "%i: %s: %.*s\n", i, token_strings[lpp->lexer.tokens[i].kind], lpp->lexer.tokens[i].raw.len, lpp->lexer.tokens[i].raw.s);
 	}
 
 	build_metaprogram(lpp);
 
 	initialize_lua(lpp);
 	load_metaprogram(lpp);
-		
+	
 	// fprintf(stdout, "%.*s\n", lpp->metaprogram.len, lpp->metaprogram.s);
 
 	run_metaprogram(lpp);
