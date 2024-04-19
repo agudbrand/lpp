@@ -9,63 +9,61 @@ local strings_header_path = "src/generated/token.strings.h"
 -- this is what allows us to do token.kind == "..."
 local string_mapping_path = "src/generated/tokens.stringmap.h"
 
--- load common hashing function
-local ffi = require "ffi"
-ffi.cdef [[
-	typedef struct str {
-		const char* s;
-		int32_t len;
-	} str;
+local CGen = require "src.cgen"
 
-	uint64_t hash_string(str s);
-]]
-local C = ffi.C
+local kind_enum = CGen.new()
+kind_enum:begin_enum("Kind")
 
-local tokens_varlen = {
-	"identifier",
-	"literal_integer",
-	"literal_float",
-	"literal_double",
-	"literal_string",
-	"comment",
-	"whitespace",
+local trie_func = CGen.new()
+trie_func:begin_function("Token::Kind", "keyword_or_identifier", "str s")
+
+local tokens_varlen =
+{
+	"Identifier",
+	"LiteralInteger",
+	"LiteralFloat",
+	"LiteralDouble",
+	"LiteralString",
+	"Comment",
+	"Whitespace",
 }
 
-local tokens_c_keywords = {
-	"auto",
-	"break",
-	"case",
-	"char",
-	"const",
-	"continue",
-	"default",
-	"do",
-	"double",
-	"else",
-	"enum",
-	"extern",
-	"float",
-	"for",
-	"goto",
-	"if",
-	"inline",
-	"int",
-	"long",
-	"register",
-	"restrict",
-	"return",
-	"short",
-	"signed",
-	"sizeof",
-	"static",
-	"struct",
-	"switch",
-	"typedef",
-	"union",
-	"unsigned",
-	"void",
-	"volatile",
-	"while",
+local tokens_c_keywords =
+{
+	{ "auto",     "Auto"     },
+	{ "break",    "Break"    },
+	{ "case",     "Case"     },
+	{ "char",     "Char"     },
+	{ "const",    "Const"    },
+	{ "continue", "Continue" },
+	{ "default",  "Default"  },
+	{ "do",       "Do"       },
+	{ "double",   "Double"   },
+	{ "else",     "Else"     },
+	{ "enum",     "Enum"     },
+	{ "extern",   "Extern"   },
+	{ "float",    "Float"    },
+	{ "for",      "For"      },
+	{ "goto",     "Goto"     },
+	{ "if",       "If"       },
+	{ "inline",   "Inline"   },
+	{ "int",      "Int"      },
+	{ "long",     "Long"     },
+	{ "register", "Register" },
+	{ "restrict", "Restrict" },
+	{ "return",   "Return"   },
+	{ "short",    "Short"    },
+	{ "signed",   "Signed"   },
+	{ "sizeof",   "Sizeof"   },
+	{ "static",   "Static"   },
+	{ "struct",   "Struct"   },
+	{ "switch",   "Switch"   },
+	{ "typedef",  "Typedef"  },
+	{ "union",    "Union"    },
+	{ "unsigned", "Unsigned" },
+	{ "void",     "Void"     },
+	{ "volatile", "Volatile" },
+	{ "while",    "While"    },
 }
 
 local tokens_c_new_keywords = {

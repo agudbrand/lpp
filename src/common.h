@@ -2,16 +2,7 @@
 #define _lpp_common_h
 
 #include "stdint.h"
-
-/* ----------------------------------------------
- *	TODO(sushi) add more log levels and make them
- *	            dependent on defines.
- */
-#define TRACE(fmt, ...)                        \
-	do {                                       \
-		fprintf(stdout, "\e[36mtrace\e[0m: "); \
-		fprintf(stdout, fmt, ##__VA_ARGS__);   \
-	} while(0); 
+#include "stddef.h"
 
 /* ----------------------------------------------
  *	Nice typedefs
@@ -31,47 +22,168 @@ typedef u8       b8; // booean type
 /* ----------------------------------------------
  *	Counted string type
  */
-typedef struct str
+struct str
 {
 	u8* s;
 	s32 len;
-} str;
 
-#define strl(x) { (u8*)u8##x, sizeof(u8##x)-1 }
+	b8 isempty();
+	u64 hash();
 
-/* ----------------------------------------------
- *	str utils
- */
-b8 isempty(str s);
-u64 hash_string(str s);
+	b8 equal(const char* s);
+
+	// will attempt to copy this str into the provided buffer
+	// and null-terminate it. If there is enough size then the 
+	// passed buffer is returned, if not then a new buffer is 
+	// allocated and returned and must be freed by the caller.
+	u8* null_terminate(u8* buffer, s32 buffer_size);
+};
+
+str operator ""_str(const char* s, size_t length);
+
+consteval s64 consteval_strlen(const char* s) {
+    s64 i = 0;
+    while(s[i])
+        i++;
+    return i;
+}
+
+consteval u64 static_string_hash(const char* s)
+{
+	u64 n = consteval_strlen(s);
+	u64 seed = 14695981039;
+	while (n--)
+	{
+		seed ^= (u8)*s;
+		seed *= 1099511628211; //64bit FNV_prime
+		s++;
+	}
+	return seed;
+}
+
+#define strl(x) str{ (u8*)u8##x, sizeof(u8##x)-1 }
 
 /* ----------------------------------------------
  *	Memory wrappers in case I ever want to alter
  *  this behavior later or add memory tracking.
  */
-void* memory_reallocate(void* ptr, u64 n_bytes);
-void memory_free(void* ptr);
-void memory_copy(void* dst, void* src, s32 bytes);
 
+struct Mem
+{
+	void* allocate(u64 n_bytes);
+	void* reallocate(void* ptr, u64 n_bytes);
+	void  free(void* ptr);
+	void  copy(void* dst, void* src, u64 bytes);
+	void  move(void* dst, void* src, u64 bytes);
+};
+
+extern Mem mem; 
+ 
 /* ----------------------------------------------
  *	Basic dynamic string type
  */
-typedef struct dstr
+struct dstr
 {
-	u8* s;
-	s32 len;
+	union 
+	{
+		struct 
+		{
+			u8* s;
+			s32 len;
+		};
+		str fin;
+	};
+
 	s32 space;
-} dstr;
 
-dstr dstr_create(const char* s);
-void dstr_destroy(dstr* s);
+	static dstr create(const char* s = 0);
 
-void dstr_push_cstr(dstr* x, const char* str);
-void dstr_push_str(dstr* x, str s);
-// pushs the STRING reprentation of 
-// 'c' to the dstr, not the character c
-void dstr_push_u8(dstr* x, u8 c);
-void dstr_push_s64(dstr* x, s64 c);
-void dstr_push_char(dstr* x, u8 c);
+	void destroy();
+
+	void append(const char* s);
+	void append(str s);
+	void append(s64 x);   
+
+	template<typename... T>
+	void appendv(T... args)
+	{
+		(append(args), ...); 
+	}
+};
+
+/* ----------------------------------------------
+ *  Printing utils
+ */
+
+void print(const char* s);
+void print(const u8* s); 
+void print(str s);
+void print(dstr s);
+void print(u32 x); 
+void print(u64 x);
+void print(s32 x);
+void print(s64 x);
+void print(char c);
+void print(void* p);
+
+// help templated stuff give better errors
+template<typename T>
+concept Printable = requires(T x) 
+{
+	print(x);
+};
+
+template<typename... T>
+	requires (Printable<T> && ...)
+void printv(T... args)
+{
+	(print(args), ...);
+}
+
+template<typename... T>
+	requires (Printable<T> && ...)
+void error_nopath(T...args)
+{
+	print("error: ");
+	(print(args), ...);
+	print("\n");
+}
+
+template<typename... T>
+	requires (Printable<T> && ...)
+void error(str path, u64 line, u64 column, T... args)
+{
+	printv(path,":",line,":",column,": ");
+	error_nopath(args...);
+}
+
+template<typename... T>
+	requires (Printable<T> && ...)
+void warn_nopath(T... args)
+{
+	printv("warning: ", args..., "\n");
+}
+
+template<typename... T>
+	requires (Printable<T> && ...)
+void warn(str path, u64 line, u64 column, T... args)
+{
+	printv(path,":",line,":",column,":");
+	warn_nopath(args...);
+}
+
+#ifndef defer
+struct defer_dummy {};
+template <class F> struct deferrer { F f; ~deferrer() { f(); } };
+template <class F> deferrer<F> operator*(defer_dummy, F f) { return {f}; }
+#  define DEFER_(LINE) zz_defer##LINE
+#  define DEFER(LINE) DEFER_(LINE)
+#  define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()
+#endif //#ifndef defer
+
+#define STRINGIZE_(a) #a
+#define STRINGIZE(a) STRINGIZE_(a)
+#define GLUE_(a,b) a##b
+#define GLUE(a,b) GLUE_(a,b)
 
 #endif // _lpp_common_h
