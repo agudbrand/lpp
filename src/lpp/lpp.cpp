@@ -43,17 +43,23 @@ b8 Lpp::run()
 		error(input_file_name, 0, 0, "failed to read file");
 		return false;
 	}
+
+	if (!lexer.init(this, buffer.s, input_file_name))
+		return false;
+
+	if (!lexer.run())
+		return false;
+
+	for (s32 i = 0; i < lexer.tokens.len(); i++)
+	{
+		printv(Token::kind_string(lexer.tokens[i].kind), "\n");
+	}
 	
 	dstr mp = dstr::create();
 
-	u8* end = buffer.s + buffer.len;
-
-	u8* chunk_start = buffer.s;
-	u8* scan = buffer.s;
-
-	auto build_metac = [&mp](u8* s, s32 len)
+	auto build_subject = [&mp](u8* s, s32 len)
 	{
-		mp.append("__C(\""_str);
+		mp.append("__SUBJECT(\""_str);
 
 		for (s32 i = 0; i < len; i++)
 		{
@@ -82,159 +88,86 @@ b8 Lpp::run()
 		mp.appendv(str{s, len}, "\n");
 	};
 
-	auto skip_whitespace = [&scan]()
-	{
-		while (isspace(*scan))
-			scan++;
-	};
-
-	auto current = [&scan]()
-	{
-		return *scan;
-	};
-
-	auto at = [&scan](u8 c)
-	{
-		return *scan == c;
-	};
-
-	auto next_at = [&scan](u8 c)
-	{
-		return *(scan+1) == c; 
-	};
-
-	auto advance = [&scan]()
-	{
-		scan++;
-	};
-
-	auto eof = [&at]()
-	{
-		return at(0);
-	};
-
-	auto at_identifier_char = [&current]()
-	{
-		return isalnum(current()) || current() == '_';
-	};
-
+	auto curt = TokenIterator::from(lexer.tokens);
+	
 	for (;;)
 	{
-		while (!at('$') && !at('@') && !eof())
-			scan++;
-		
-		if (eof())
-		{
-			build_metac(chunk_start, scan - chunk_start);
+		using enum Token::Kind;
+
+		if (curt->kind == Eof)
 			break;
-		}
 
-		if (at('$'))
+		switch (curt->kind)
 		{
-			build_metac(chunk_start, scan - chunk_start);
+			case Subject: {
+				mp.append("__SUBJECT(\""_str);
 
-			advance();
-
-			if (at('$') && next_at('$'))
-			{
-				advance();
-				advance();
-				chunk_start = scan;
-
-				for (;;)
+				for (u8 c : curt->raw)
 				{
-					while (!at('$') && !eof())
-						advance();
-
-					if (eof())
-						break;
-
-					if (at('$') && (advance(), at('$') && next_at('$')))
-					{
-						scan -= 1;
-						break;
-					}
+					if (iscntrl(c))
+						mp.appendv("\\"_str, c);
+					else if (c == '"')
+						mp.appendv("\\\""_str);
+					else if (c == '\\')
+						mp.appendv("\\\\"_str);
+					else
+						mp.append((char)c);
 				}
 
-				build_metalua_line(chunk_start, scan-chunk_start);
+				mp.append("\")\n"_str);
+				curt.next();
+			} break;
 
-				if (eof())
-					break;
+			case LuaLine: 
+				mp.appendv(curt->raw, "\n");
+				curt.next();
+				break;
 
-				scan += 2;
-			}
-			else
-			{
-				chunk_start = scan;
-				while (!at('\n') && !eof())
-					advance();
-				build_metalua_line(chunk_start, scan - chunk_start);
-			}
+			case LuaBlock:
+				mp.append(curt->raw);
+				curt.next();
+				break;
 
-			chunk_start = scan;
-		}
+			case LuaInline:
+				mp.appendv("__SUBJECT(__VAL("_str, curt->raw, "))\n"_str);
+				curt.next();
+				break;
 
-		if (at('@'))
-		{
-			advance();
-			chunk_start = scan;
-			skip_whitespace();
-			if (!at_identifier_char())
-			{
-				ERROR("token following a lua macro (@) must be an identifier of a lua function\n");
-				return false;
-			}
+			case MacroSymbol: {
+				mp.appendv("__SET_MACRO_TOKEN_INDEX(", curt.curt - lexer.tokens.arr, ")\n");
+				mp.append("__SUBJECT(__MACRO("_str);
+				
+				curt.next(); // identifier
+				mp.append(curt->raw);
 
-			while ((at_identifier_char() || isdigit(current())) && !eof())
-				advance();
-
-			if (eof())
-			{
-				ERROR("unexpected end of file while consuming lua macro\n");
-				return false;
-			}
-
-			build_metalua(chunk_start, scan - chunk_start);
-
-			skip_whitespace();
-
-			if (at('('))
-			{
-				advance();
-				chunk_start = scan;
-				mp.append('(');
-				while (!eof())
+				if (curt.next() && curt->kind == MacroArgumentTupleArg)
 				{
-					mp.append('"');
-					skip_whitespace();
-					while (!at(',') && !at(')') && !eof()) 
-						advance();
-
-					if (eof())
+					mp.append('(');
+					if (curt->kind == MacroArgumentTupleArg)
 					{
-						ERROR("unexpected end of file while consuming lua macro arguments");
-						return false;
+						for (;;)
+						{
+							mp.appendv('"', curt->raw, '"');
+
+							if (curt.next())
+							{
+								if (curt->kind != MacroArgumentTupleArg)
+									break;
+
+								mp.append(',');
+							}
+							else
+								break;
+						}
 					}
-					
-					build_metalua(chunk_start, scan - chunk_start);
-
-					mp.append('"');
-
-					b8 quit = at(')');
-					advance();
-					chunk_start = scan;
-
-					if (quit)
-						break;
-
-					mp.append(',');
+					mp.append(')');
 				}
 
-				mp.append(")\n"_str);
-			}
-
+				mp.append("))\n"_str);
+			} break;
 		}
 	}
+
 
 	mp.append("return __FINAL()\n");
 
@@ -256,15 +189,15 @@ b8 Lpp::run()
 		return false;
 	}
 
-	if (lua_pcall(L, 0, 1, 0))
+	if (lua_pcall(L, 0, 2, 0))
 	{
 		ERROR("failed to run metaenvironment:\n", lua_tostring(L, -1), "\n");
 		return false;
 	}
 
-	lua_pushstring(L, "__LPP");
-	lua_gettable(L, -2);
-	lua_pushstring(L, "context");
+	// the lpp table is at the top of the stack and we need to give it 
+	// a handle this this context
+	lua_pushstring(L, "handle");
 	lua_pushlightuserdata(L, this);
 	lua_settable(L, -3);
 	lua_pop(L, 1);
@@ -281,7 +214,17 @@ b8 Lpp::run()
 		return false;
 	}
 
-	TRACE(lua_tostring(L, -1), "\n");
+	printv(lua_tostring(L, -1), "\n");
 
 	return true;
+}
+
+extern "C"
+{
+
+str get_token_indentation(Lpp* lpp, s32 idx)
+{
+	return lpp->lexer.tokens[idx].indentation;
+}
+
 }

@@ -2,10 +2,14 @@
  *  Array util
  *  
  *  Kept simple, doesn't consider silly C++ stuff like constructing and such
+ *
+ *  BUT IT MIGHT have to idk 
+ *
+ *  This array stores length and space as a header of the actual data.
  */
 
-#ifndef _lake_array_h
-#define _lake_array_h
+#ifndef _lpp_array_h
+#define _lpp_array_h
 
 #include "common.h"
 
@@ -34,20 +38,28 @@ struct Array
 	void insert(s32 idx, const T& x);
 
 	Header* get_header() { return (Header*)arr - 1; }
+
+	T& operator [](s64 i) { return arr[i]; }
+
+	T* begin() { return arr; }
+	T* end()   { return arr + len(); }
+
+	void grow_if_needed(s32 new_elements);
 };
 
 template<typename T>
-void grow_if_needed(Array<T>* a, const s32 new_elements)
+void Array<T>::grow_if_needed(s32 new_elements)
 {
-	typedef typename Array<T>::Header Header;
+	Header* header = get_header();
 
-	if (a->len() + new_elements <= a->space())
+	if (header->len + new_elements <= header->space)
 		return;
 
-	while (a->len() + new_elements > a->space())
-		a->space() *= 2;
+	while (header->len + new_elements > header->space)
+		header->space *= 2;
 
-	a->arr = (T*)(-1 + (Header*)mem.allocate(sizeof(Header) + a->space() * sizeof(T)));
+	header = (Header*)mem.reallocate(header, sizeof(Header) + header->space * sizeof(T));
+	arr = (T*)(header + 1);
 }
 
 template<typename T>
@@ -82,7 +94,7 @@ Array<T> Array<T>::create(s32 init_space)
 template<typename T>
 T* Array<T>::push()
 {
-	grow_if_needed(this, 1);
+	grow_if_needed(1);
 
 	len() += 1;
 	return &arr[len()-1];
@@ -91,7 +103,7 @@ T* Array<T>::push()
 template<typename T>
 void Array<T>::push(const T& x)
 {
-	grow_if_needed(this, 1);
+	grow_if_needed(1);
 
 	arr[len()] = x;
 	len() += 1;
@@ -106,9 +118,10 @@ void Array<T>::pop()
 template<typename T>
 void Array<T>::insert(s32 idx, const T& x)
 {
-	grow_if_needed(this, 1);
+	grow_if_needed(1);
 
-	if (!len()) push(x);
+	if (!len()) 
+		push(x);
 	else
 	{
 		mem.move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));

@@ -9,7 +9,7 @@ files := {}
 
 files.c = lake.find("src/lpp/*.cpp")
 lake.concat(files.c, lake.find("src/*.cpp"))
-files.o = lake.replace(files.c, "(src/(.-)).cpp", build_dir.."%1.o")
+files.o = lake.replace(files.c, "(src/.-).cpp", build_dir.."%1.o")
 files.d = lake.replace(files.o, "(.-).o", "%1.d")
 
 compiler     := "clang++"

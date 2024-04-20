@@ -37,6 +37,9 @@ struct str
 	// passed buffer is returned, if not then a new buffer is 
 	// allocated and returned and must be freed by the caller.
 	u8* null_terminate(u8* buffer, s32 buffer_size);
+
+	u8* begin() { return s; }
+	u8* end()   { return s + len; }
 };
 
 str operator ""_str(const char* s, size_t length);

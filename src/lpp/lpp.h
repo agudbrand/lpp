@@ -9,6 +9,7 @@
 #define _lpp_lpp_h
 
 #include "common.h"
+#include "lex.h"
 
 struct lua_State;
 
@@ -20,6 +21,8 @@ struct Lpp
 	b8 use_color;
  
 	dstr metaprogram;
+
+	Lexer lexer;
 
 	lua_State* L;
 
