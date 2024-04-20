@@ -23,7 +23,7 @@ struct Lpp
 
 	lua_State* L;
 
-	void run();
+	b8 run();
 }; 
 
 #endif // _lpp_lpp_h

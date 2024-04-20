@@ -16,16 +16,16 @@ VPATH = src
 # and then generate their respective object and dependency
 # file paths
 
-common_c_files := $(wildcard src/*.c)
-common_o_files := $(foreach file,$(common_c_files),${build_dir}/$(file:.c=.o))
+common_c_files := $(wildcard src/*.cpp)
+common_o_files := $(foreach file,$(common_c_files),${build_dir}/$(file:.cpp=.o))
 common_d_files := $(common_o_files:.o=.d)
 
-lpp_c_files := $(wildcard src/lpp/*.c)
-lpp_o_files := $(foreach file,$(lpp_c_files),${build_dir}/$(file:.c=.o))
+lpp_c_files := $(wildcard src/lpp/*.cpp)
+lpp_o_files := $(foreach file,$(lpp_c_files),${build_dir}/$(file:.cpp=.o))
 lpp_d_files := $(lpp_o_files:.o=.d)
 
-commonlua_c_files := $(wildcard src/commonlua/*.c)
-commonlua_o_files := $(foreach file,$(commonlua_c_files),${build_dir}/$(file:.c=.o))
+commonlua_c_files := $(wildcard src/commonlua/*.cpp)
+commonlua_o_files := $(foreach file,$(commonlua_c_files),${build_dir}/$(file:.cpp=.o))
 commonlua_d_files := $(commonlua_o_files:.o=.d)
 
 # clean up stuff we output
@@ -43,16 +43,17 @@ endif
 
 # choose which stuff to use to build
 # this should be adjustable later
-compiler     := clang
-linker       := clang
+compiler     := clang++
+linker       := clang++
 preprocessor := cpp
 
 compiler_flags :=     \
-	-std=gnu2x        \
+	-std=c++20        \
 	-Iinclude         \
 	-Isrc             \
 	-Wno-pointer-sign \
 	-Wno-gnu-folding-constant \
+	-Wno-\#warnings   \
 	-Wno-switch
 
 ifeq ($(build_mode),debug)
@@ -86,13 +87,13 @@ ${commonlua}: ${commonlua_o_files} ${common_o_files}
 	@printf "$(blue)$@$(reset)\n"
 
 # generic rule for turning c files into object files
-${build_dir}/%.o: %.c 
+${build_dir}/%.o: %.cpp
 	@mkdir -p $(@D) # ensure directories exist
-	$(v)${compiler} -c $< ${compiler_flags} -o $@
+	$(v)${compiler} ${compiler_flags} -c $<  -o $@
 	$(call print,$<,$@)
 
 # generic rule for turning c files into dependency files
-${build_dir}/%.d: %.c
+${build_dir}/%.d: %.cpp
 	@mkdir -p $(@D) # ensure directories exist
 	$(v)${preprocessor} $< ${compiler_flags} -MM -MG -MT ${build_dir}/$*.o -o $@
 

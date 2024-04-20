@@ -14,17 +14,22 @@ struct Lpp;
 
 struct Token
 {
+	enum class Kind
+	{
+		LuaLine,
+		LuaInline,
+		LuaBlock,
+
+		Macro,
+		MacroArgument,
+		
+		Subject,
+	};
+
 	str raw;
 
 	int line;
 	int column;
-
-	union
-	{
-		s64 _s64;
-		f64 _f64;
-		f32 _f32;
-	} literal;
 };
 
 struct Lexer

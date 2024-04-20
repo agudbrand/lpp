@@ -102,7 +102,9 @@ struct dstr
 
 	void append(const char* s);
 	void append(str s);
-	void append(s64 x);   
+	void append(s64 x);
+    void append(char c);
+    void append(u8 x);
 
 	template<typename... T>
 	void appendv(T... args)

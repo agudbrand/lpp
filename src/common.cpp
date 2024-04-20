@@ -155,4 +155,17 @@ void dstr::append(s64 x)
 	len += snprintf((char*)(s + len), 22, "%li", x);
 }
 
+void dstr::append(char c)
+{
+    grow_if_needed(this, 1);
+    s[len] = c;
+    len += 1;
+}
+
+void dstr::append(u8 c)
+{
+    grow_if_needed(this, 3);
+    len += snprintf((char*)(s+len), 3, "%hhu", c);
+}
+
 
