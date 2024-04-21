@@ -17,7 +17,7 @@ class str_printer:
         self.val = val
 
     def to_string(self):
-        s = int(self.val["s"])
+        s = int(self.val["bytes"])
         len = self.val["len"]
         if len == 0:
             return "empty"
@@ -25,6 +25,6 @@ class str_printer:
         buf = buf.replace('\n', '\\n')
         buf = buf.replace('\t', '\\t')
         return f"\"{buf}\""
-pp.add_printer("str", r"^str$", str_printer)
+pp.add_printer("str", r"^utf8::str$", str_printer)
 
 gdb.printing.register_pretty_printer(gdb.current_objfile(), pp)
