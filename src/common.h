@@ -19,31 +19,6 @@ typedef float    f32;
 typedef double   f64;
 typedef u8       b8; // booean type
 
-/* ----------------------------------------------
- *	Counted string type
- */
-struct str
-{
-	u8* s;
-	s32 len;
-
-	b8 isempty();
-	u64 hash();
-
-	b8 equal(const char* s);
-
-	// will attempt to copy this str into the provided buffer
-	// and null-terminate it. If there is enough size then the 
-	// passed buffer is returned, if not then a new buffer is 
-	// allocated and returned and must be freed by the caller.
-	u8* null_terminate(u8* buffer, s32 buffer_size);
-
-	u8* begin() { return s; }
-	u8* end()   { return s + len; }
-};
-
-str operator ""_str(const char* s, size_t length);
-
 consteval s64 consteval_strlen(const char* s) {
     s64 i = 0;
     while(s[i])
@@ -64,7 +39,10 @@ consteval u64 static_string_hash(const char* s)
 	return seed;
 }
 
-#define strl(x) str{ (u8*)u8##x, sizeof(u8##x)-1 }
+consteval u64 operator ""_hashed (const char* s)
+{
+	return static_string_hash(s);
+}
 
 /* ----------------------------------------------
  *	Memory wrappers in case I ever want to alter
@@ -82,39 +60,6 @@ struct Mem
 
 extern Mem mem; 
  
-/* ----------------------------------------------
- *	Basic dynamic string type
- */
-struct dstr
-{
-	union 
-	{
-		struct 
-		{
-			u8* s;
-			s32 len;
-		};
-		str fin;
-	};
-
-	s32 space;
-
-	static dstr create(const char* s = 0);
-
-	void destroy();
-
-	void append(const char* s);
-	void append(str s);
-	void append(s64 x);
-    void append(char c);
-    void append(u8 x);
-
-	template<typename... T>
-	void appendv(T... args)
-	{
-		(append(args), ...); 
-	}
-};
 
 /* ----------------------------------------------
  *  Printing utils
@@ -122,12 +67,11 @@ struct dstr
 
 void print(const char* s);
 void print(const u8* s); 
-void print(str s);
-void print(dstr s);
 void print(u32 x); 
 void print(u64 x);
 void print(s32 x);
 void print(s64 x);
+void print(f64 x);
 void print(char c);
 void print(void* p);
 
@@ -138,43 +82,10 @@ concept Printable = requires(T x)
 	print(x);
 };
 
-template<typename... T>
-	requires (Printable<T> && ...)
+template<Printable... T>
 void printv(T... args)
 {
 	(print(args), ...);
-}
-
-template<typename... T>
-	requires (Printable<T> && ...)
-void error_nopath(T...args)
-{
-	print("error: ");
-	(print(args), ...);
-	print("\n");
-}
-
-template<typename... T>
-	requires (Printable<T> && ...)
-void error(str path, u64 line, u64 column, T... args)
-{
-	printv(path,":",line,":",column,": ");
-	error_nopath(args...);
-}
-
-template<typename... T>
-	requires (Printable<T> && ...)
-void warn_nopath(T... args)
-{
-	printv("warning: ", args..., "\n");
-}
-
-template<typename... T>
-	requires (Printable<T> && ...)
-void warn(str path, u64 line, u64 column, T... args)
-{
-	printv(path,":",line,":",column,":");
-	warn_nopath(args...);
 }
 
 #ifndef defer
