@@ -22,10 +22,10 @@ b8 Lpp::run()
 
 	TRACE("Lpp::run()\n");
 
-	FILE* file = fopen((char*)input_file_name.s, "r");
+	FILE* file = fopen((char*)input_file_name.bytes, "r");
 	if (!file)
 	{
-		error(input_file_name, 0, 0, "failed to open file");
+		ERROR(input_file_name, ": failed to open file");
 		return false;
 	}
 
@@ -35,16 +35,16 @@ b8 Lpp::run()
 	buffer.len = ftell(file);
 	fseek(file, 0, SEEK_SET);
 	
-	buffer.s = (u8*)mem.allocate(buffer.len);
-	defer { mem.free(buffer.s); };
+	buffer.bytes = (u8*)mem.allocate(buffer.len);
+	defer { mem.free(buffer.bytes); };
 
-	if (!fread(buffer.s, buffer.len, 1, file))
+	if (!fread(buffer.bytes, buffer.len, 1, file))
 	{
-		error(input_file_name, 0, 0, "failed to read file");
+		ERROR(input_file_name, ": failed to read file");
 		return false;
 	}
 
-	if (!lexer.init(this, buffer.s, input_file_name))
+	if (!lexer.init(this, buffer.bytes, input_file_name))
 		return false;
 
 	if (!lexer.run())
@@ -177,7 +177,7 @@ b8 Lpp::run()
 	lua_State* L = lua_open();
 	luaL_openlibs(L);
 
-	if (luaL_loadbuffer(L, (char*)mp.s, mp.len, (char*)input_file_name.s))
+	if (luaL_loadbuffer(L, (char*)mp.bytes, mp.len, (char*)input_file_name.bytes))
 	{
 		ERROR("failed to load metaprogram:\n", lua_tostring(L, -1), "\n");
 		return false;

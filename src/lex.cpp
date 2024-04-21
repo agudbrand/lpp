@@ -81,13 +81,13 @@ b8 Lexer::run()
 		t.kind = Eof;
 		t.line = line;
 		t.column = column;
-		t.raw.s = cursor;
+		t.raw.bytes = cursor;
 		t.indentation = {};
 	};
 
 	auto finish_token = [&t, reset_token, this](Token::Kind kind, s32 len_offset = 0)
 	{
-		s32 len = cursor - t.raw.s;
+		s32 len = cursor - t.raw.bytes;
 		if (len) // this might be fine in all cases, and ignoring the offset, but im not sure 
 		{
 			t.kind = kind;
@@ -182,7 +182,7 @@ b8 Lexer::run()
 					if (tokens.len() > 0)
 					{
 						Token* last = tokens.arr + tokens.len() - 2;
-						while (isspace(last->raw.s[last->raw.len-1]))
+						while (isspace(last->raw.bytes[last->raw.len-1]))
 							last->raw.len -= 1;
 					}
 				}

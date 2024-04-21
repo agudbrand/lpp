@@ -11,10 +11,14 @@
 
 struct Lpp;
 
+/* ================================================================================================ Token
+ */
 struct Token
 {
 	enum class Kind
 	{
+		Invalid,
+
 		Eof,
 
 		LuaLine,
@@ -41,6 +45,8 @@ struct Token
 	int line;
 	int column;
 
+	static Token invalid() { return {Kind::Invalid}; }
+
 	static str kind_string(Kind kind)
 	{
 		using enum Kind;
@@ -64,6 +70,8 @@ struct Token
 
 typedef Array<Token> TokenArray;
 
+/* ================================================================================================ Lexer
+ */
 struct Lexer
 {
 	TokenArray tokens;
@@ -113,6 +121,8 @@ private:
 	}
 };
 
+/* ================================================================================================ TokenIterator
+ */
 struct TokenIterator
 {
 	Token* curt;
