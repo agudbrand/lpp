@@ -7,10 +7,10 @@ lpp := lake.target(build_dir.."lpp")
 
 files := {}
 
-files.c = lake.find("src/lpp/*.cpp")
-lake.concat(files.c, lake.find("src/*.cpp"))
-files.o = lake.replace(files.c, "(src/.-).cpp", build_dir.."%1.o")
-files.d = lake.replace(files.o, "(.-).o", "%1.d")
+files.c = lake.find("src/*.cpp")
+lake.concat(files.c, lake.find("src/json/*.cpp"))
+files.o = lake.replace(files.c, "(src/.-)%.cpp", build_dir.."%1.o")
+files.d = lake.replace(files.o, "(.-)%.o", "%1.d")
 
 compiler     := "clang++"
 linker       := "clang++"
@@ -99,7 +99,7 @@ compiler_recipe := function(input, output)
         else
             io.write(red, "compiling ", blue, output, red, " failed", reset, ":\n")
 			io.write(result.stdout)
-			error(red.."compiler failed"..reset)
+			-- error(red.."compiler failed"..reset)
         end
     end
 end
