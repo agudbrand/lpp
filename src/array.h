@@ -92,6 +92,13 @@ Array<T> Array<T>::create(s32 init_space)
 }
 
 template<typename T>
+void Array<T>::destroy()
+{
+	mem.free(get_header());
+	arr = nullptr;
+}
+
+template<typename T>
 T* Array<T>::push()
 {
 	grow_if_needed(1);
