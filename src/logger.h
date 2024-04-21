@@ -6,6 +6,7 @@
 #define _lake_logger_h
 
 #include "common.h"
+#include "unicode.h"
 
 #define __HELPER(v, ...) if ((u32)log.verbosity <= (u32)Logger::Verbosity::v) log.log(Logger::Verbosity::v, __VA_ARGS__)
 
@@ -37,20 +38,19 @@ struct Logger
 	u64 indentation;
 
 	template<typename... T>
-		requires (Printable<T> && ...)
 	void log(Verbosity v, T... args)
 	{
 		using enum Verbosity;
 
 		switch (v)  
 		{
-			case Trace:  print(strl(" trace: ")); break;
-			case Debug:  print(strl(" debug: ")); break;
-			case Info:   print(strl("  info: ")); break;
-			case Notice: print(strl("notice: ")); break;
-			case Warn:   print(strl("  warn: ")); break;
-			case Error:  print(strl(" error: ")); break;
-			case Fatal:  print(strl(" fatal: ")); break;
+			case Trace:  print(" trace: "_str); break;
+			case Debug:  print(" debug: "_str); break;
+			case Info:   print("  info: "_str); break;
+			case Notice: print("notice: "_str); break;
+			case Warn:   print("  warn: "_str); break;
+			case Error:  print(" error: "_str); break;
+			case Fatal:  print(" fatal: "_str); break;
 		}
 
 		for (u32 i = 0; i < indentation; i++)
