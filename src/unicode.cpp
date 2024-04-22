@@ -9,6 +9,8 @@
 namespace utf8
 {
 
+Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Warn);
+
 /* ------------------------------------------------------------------------------------------------ utf8::bytes_needed_to_encode_character
  */
 u8 bytes_needed_to_encode_character(u32 c)
@@ -220,18 +222,17 @@ b8 str::operator==(str s)
 }
 
 /* ------------------------------------------------------------------------------------------------ utf8::str::hash
+ *  REMEMBER: this needs to be exactly the same as static_string_hash!!!!
  */
 u64 str::hash()
 {
-	u64 n = len;
 	u64 seed = 14695981039;
-	while (n--)
+	for (s32 i = 0; i < len; i++)
 	{
-		seed ^= (u8)bytes[n];
+		seed ^= (u8)bytes[i];
 		seed *= 1099511628211; //64bit FNV_prime
 	}
 	return seed;
-
 }
 
 /* ------------------------------------------------------------------------------------------------ utf8::str::null_terminate
@@ -251,6 +252,32 @@ b8 str::null_terminate(u8* buffer, s32 buffer_len)
 b8 str::isempty()
 {
 	return len == 0;
+}
+
+/* ------------------------------------------------------------------------------------------------ utf8::str::find_first
+ */
+str::pos str::find_first(u8 c)
+{
+	for (s32 i = 0; i < len; i++)
+	{
+		if (bytes[i] == c)
+			return pos::found(i);
+	}
+	return pos::not_found();
+}
+
+/* ------------------------------------------------------------------------------------------------ utf8::str::starts_with
+ */
+b8 str::starts_with(str s)
+{
+	if (s.len > len)
+		return false;
+	for (s32 i = 0; i < s.len; i++)
+	{
+		if (bytes[i] != s.bytes[i])
+			return false;
+	}
+	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------ utf8::dstr::create
@@ -344,9 +371,6 @@ void dstr::append(u8 c)
     grow_if_needed(this, 3);
     len += snprintf((char*)(bytes+len), 3, "%hhu", c);
 }
-
-void print(str s) { printf("%.*s", s.len, s.bytes); }
-void print(dstr s) { printf("%.*s", s.len, s.bytes); }
 
 } // namespace utf8
 
