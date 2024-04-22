@@ -73,7 +73,7 @@ Codepoint decode_character(u8* s, s32 slen);
 struct str
 {
 	u8* bytes;
-	s32 len;
+	s64 len;
 
 	b8 isempty();
 
@@ -92,6 +92,22 @@ struct str
 
 	u8* begin() { return bytes; }
 	u8* end()   { return bytes + len; }
+
+	struct pos
+	{
+		s64 x;
+
+		static pos found(s64 x) { return {x}; }
+		static pos not_found() { return {-1}; }
+		b8 found() { return x != -1; }
+		operator bool() { return found(); }
+		operator s64() { return x; }
+	};
+
+	// each find function should provide a byte and codepoint variant
+	pos find_first(u8 c);
+
+	b8 starts_with(str s);
 };
 
 /* ================================================================================================ utf8::dstr
@@ -104,7 +120,7 @@ struct dstr
 		struct 
 		{
 			u8* bytes;
-			s32 len;
+			s64 len;
 		};
 		str fin;
 	};
@@ -115,11 +131,18 @@ struct dstr
 
 	void destroy();
 
+	void reset()
+	{
+		len = 0;
+	};
+
 	void append(const char* s);
 	void append(str s);
 	void append(s64 x);
     void append(char c);
     void append(u8 x);
+
+	u64 hash() { return fin.hash(); }
 
 	template<typename... T>
 	void appendv(T... args)
