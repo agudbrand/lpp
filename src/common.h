@@ -26,22 +26,20 @@ consteval s64 consteval_strlen(const char* s) {
     return i;
 }
 
-consteval u64 static_string_hash(const char* s)
+consteval u64 static_string_hash(const char* s, size_t len)
 {
-	u64 n = consteval_strlen(s);
 	u64 seed = 14695981039;
-	while (n--)
+	for (s32 i = 0; i < len; i++)
 	{
-		seed ^= (u8)*s;
-		seed *= 1099511628211; //64bit FNV_prime
-		s++;
+		seed ^= (u8)s[i];
+		seed *= 1099511628211;
 	}
 	return seed;
 }
 
-consteval u64 operator ""_hashed (const char* s)
+consteval u64 operator ""_hashed (const char* s, size_t len)
 {
-	return static_string_hash(s);
+	return static_string_hash(s, len);
 }
 
 /* ----------------------------------------------
@@ -60,34 +58,6 @@ struct Mem
 
 extern Mem mem; 
  
-
-/* ----------------------------------------------
- *  Printing utils
- */
-
-void print(const char* s);
-void print(const u8* s); 
-void print(u32 x); 
-void print(u64 x);
-void print(s32 x);
-void print(s64 x);
-void print(f64 x);
-void print(char c);
-void print(void* p);
-
-// help templated stuff give better errors
-template<typename T>
-concept Printable = requires(T x) 
-{
-	print(x);
-};
-
-template<Printable... T>
-void printv(T... args)
-{
-	(print(args), ...);
-}
-
 #ifndef defer
 struct defer_dummy {};
 template <class F> struct deferrer { F f; ~deferrer() { f(); } };
