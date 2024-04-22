@@ -12,172 +12,178 @@ extern "C"
 #include "lauxlib.h"
 };
 
-Logger log;
+#include "assert.h"
+
+/* ------------------------------------------------------------------------------------------------ Lpp::init
+ */
+b8 Lpp::init(io::IO* input_stream, io::IO* output_stream, Logger::Verbosity verbosity)
+{
+    assert(input_stream && output_stream);
+
+    logger.init("lpp"_str, verbosity);
+
+    TRACE("initializing with input stream ", (void*)input_stream, " and output stream ", (void*)output_stream, "\n");
+    SCOPED_INDENT;
+
+    tokens = Array<Token>::create();
+    in = input_stream;
+    out = output_stream;
+
+    DEBUG("initializing lexer\n");
+    if (!lexer.init(input_stream, ""_str, verbosity))
+        return false;
+
+    return true;
+}
 
 /* ------------------------------------------------------------------------------------------------ Lpp::run
  */
 b8 Lpp::run()
 {
-	log.verbosity = Logger::Verbosity::Trace;
+    INFO("running lpp\n");
 
-	TRACE("Lpp::run()\n");
+    DEBUG("opening metaprogram buffer\n");
+    io::Memory metaprogram;
+    metaprogram.open();
 
-	FILE* file = fopen((char*)input_file_name.bytes, "r");
-	if (!file)
+	auto build_subject = [&metaprogram](u8* s, s32 len)
 	{
-		ERROR(input_file_name, ": failed to open file");
-		return false;
-	}
-
-	str buffer = {};
-
-	fseek(file, 0, SEEK_END);
-	buffer.len = ftell(file);
-	fseek(file, 0, SEEK_SET);
-	
-	buffer.bytes = (u8*)mem.allocate(buffer.len);
-	defer { mem.free(buffer.bytes); };
-
-	if (!fread(buffer.bytes, buffer.len, 1, file))
-	{
-		ERROR(input_file_name, ": failed to read file");
-		return false;
-	}
-
-	if (!lexer.init(this, buffer.bytes, input_file_name))
-		return false;
-
-	if (!lexer.run())
-		return false;
-
-	for (s32 i = 0; i < lexer.tokens.len(); i++)
-	{
-		printv(Token::kind_string(lexer.tokens[i].kind), "\n");
-	}
-	
-	dstr mp = dstr::create();
-
-	auto build_subject = [&mp](u8* s, s32 len)
-	{
-		mp.append("__SUBJECT(\""_str);
+        io::format(&metaprogram, "__SUBJECT(\""_str);
 
 		for (s32 i = 0; i < len; i++)
 		{
 			u8 c = s[i];
 
 			if (iscntrl(c))
-				mp.appendv("\\", c);
+				io::formatv(&metaprogram, "\\", c);
 			else if (c == '"')
-				mp.appendv("\\", '"');
+				io::formatv(&metaprogram, "\\", '"');
 			else if (c == '\\')
-				mp.appendv("\\\\");
+				io::formatv(&metaprogram, "\\\\");
 			else
-				mp.append((char)c);
+				io::formatv(&metaprogram, (char)c);
 		}
 
-		mp.append("\")\n");
+        io::format(&metaprogram, "\")\n");
 	};
 
-	auto build_metalua = [&mp](u8* s, s32 len)
+	auto build_metalua = [&metaprogram](u8* s, s32 len)
 	{
-		mp.append(str{s, len});
+        io::format(&metaprogram, str{s, len});
 	};
 
-	auto build_metalua_line = [&mp](u8* s, s32 len)
+	auto build_metalua_line = [&metaprogram](u8* s, s32 len)
 	{
-		mp.appendv(str{s, len}, "\n");
+        io::formatv(&metaprogram, str{s, len}, "\n");
 	};
 
-	auto curt = TokenIterator::from(lexer.tokens);
+    Token curt;
+    s64 idx = -1;
+
+    auto next_token = [&idx, &curt, this]()
+    {
+        curt = lexer.next_token();
+        idx += 1;
+        tokens.push(curt);
+        return curt.kind != Token::Kind::Eof;
+    };
 	
+    INFO("starting parse\n");
+
 	for (;;)
 	{
 		using enum Token::Kind;
 
-		if (curt->kind == Eof)
+        next_token();
+
+        if (!curt.is_valid())
+            return false;
+
+		if (curt.kind == Eof)
 			break;
 
-		switch (curt->kind)
+		switch (curt.kind)
 		{
 			case Subject: {
-				mp.append("__SUBJECT(\""_str);
+                io::format(&metaprogram, "__SUBJECT(\""_str);
 
-				for (u8 c : curt->raw)
+				for (u8 c : lexer.get_raw(curt))
 				{
 					if (iscntrl(c))
-						mp.appendv("\\"_str, c);
+						io::formatv(&metaprogram, "\\"_str, c);
 					else if (c == '"')
-						mp.appendv("\\\""_str);
+						io::format(&metaprogram, "\\\""_str);
 					else if (c == '\\')
-						mp.appendv("\\\\"_str);
+						io::format(&metaprogram, "\\\\"_str);
 					else
-						mp.append((char)c);
+						io::format(&metaprogram, (char)c);
 				}
 
-				mp.append("\")\n"_str);
-				curt.next();
+				metaprogram.write("\")\n"_str);
+
+                next_token();
 			} break;
 
 			case LuaLine: 
-				mp.appendv(curt->raw, "\n");
-				curt.next();
+                TRACE("placing lua line: '", lexer.get_raw(curt), "'\n");
+                io::formatv(&metaprogram, lexer.get_raw(curt), "\n");
+				next_token();
 				break;
 
 			case LuaBlock:
-				mp.append(curt->raw);
-				curt.next();
+                io::format(&metaprogram, lexer.get_raw(curt));
+				next_token();
 				break;
 
 			case LuaInline:
-				mp.appendv("__SUBJECT(__VAL("_str, curt->raw, "))\n"_str);
-				curt.next();
+                io::formatv(&metaprogram, "__SUBJECT(__VAL("_str, lexer.get_raw(curt), "))\n"_str);
+				next_token();
 				break;
 
 			case MacroSymbol: {
-				mp.appendv("__SET_MACRO_TOKEN_INDEX(", curt.curt - lexer.tokens.arr, ")\n");
-				mp.append("__SUBJECT(__MACRO("_str);
+                io::formatv(&metaprogram,
+                        "__SET_MACRO_TOKEN_INDEX("_str, idx, ")\n",
+                        "__SUBJECT(__MACRO("_str);
 				
-				curt.next(); // identifier
-				mp.append(curt->raw);
+				next_token(); // identifier
+                io::format(&metaprogram, lexer.get_raw(curt));
 
-				if (curt.next() && curt->kind == MacroArgumentTupleArg)
+				if (next_token() && curt.kind == MacroArgumentTupleArg)
 				{
-					mp.append('(');
-					if (curt->kind == MacroArgumentTupleArg)
+                    io::format(&metaprogram, '(');
+					if (curt.kind == MacroArgumentTupleArg)
 					{
 						for (;;)
 						{
-							mp.appendv('"', curt->raw, '"');
+                            io::formatv(&metaprogram, '"', lexer.get_raw(curt), '"');
 
-							if (curt.next())
+							if (next_token())
 							{
-								if (curt->kind != MacroArgumentTupleArg)
+								if (curt.kind != MacroArgumentTupleArg)
 									break;
 
-								mp.append(',');
+                                io::format(&metaprogram, ',');
 							}
 							else
 								break;
 						}
 					}
-					mp.append(')');
+                    io::format(&metaprogram, ')');
 				}
 
-				mp.append("))\n"_str);
+                io::format(&metaprogram, "))\n"_str);
 			} break;
 		}
 	}
 
+    io::format(&metaprogram, "return __FINAL()\n");
 
-	mp.append("return __FINAL()\n");
-
-	print(mp);
-	print("\n\n-------------------\n\n");
+    INFO(metaprogram.as_str(), "\n\n--------------------\n\n");
 
 	lua_State* L = lua_open();
 	luaL_openlibs(L);
 
-	if (luaL_loadbuffer(L, (char*)mp.bytes, mp.len, (char*)input_file_name.bytes))
+	if (luaL_loadbuffer(L, (char*)metaprogram.buffer, metaprogram.len, "metaprogram"))
 	{
 		ERROR("failed to load metaprogram:\n", lua_tostring(L, -1), "\n");
 		return false;
@@ -214,7 +220,7 @@ b8 Lpp::run()
 		return false;
 	}
 
-	printv(lua_tostring(L, -1), "\n");
+	INFO(lua_tostring(L, -1), "\n");
 
 	return true;
 }
@@ -224,7 +230,7 @@ extern "C"
 
 str get_token_indentation(Lpp* lpp, s32 idx)
 {
-	return lpp->lexer.tokens[idx].indentation;
+	return ""_str; //lpp->tokens[idx].indentation;
 }
 
 }

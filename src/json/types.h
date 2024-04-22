@@ -11,6 +11,7 @@
 #include "list.h"
 #include "unicode.h"
 #include "array.h"
+#include "io.h"
 
 namespace json
 {
@@ -99,6 +100,9 @@ struct Value
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 	 */
 
+	b8   init();
+	void deinit();
+	
 
 	void print();
 };
@@ -129,9 +133,19 @@ struct JSON
 	// allocates a value of the given kind from the pool and returns a pointer to it
 	Value* new_value(Value::Kind kind);
 
-	void pretty_print();
+	s64 pretty_print(io::IO* out);
 };
 
 } // namespace json
+
+namespace io
+{
+
+static s64 format(IO* io, json::JSON json)
+{
+	return json.pretty_print(io);
+}
+
+}
 
 #endif // _lpp_json_types_h

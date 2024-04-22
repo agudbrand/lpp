@@ -6,7 +6,12 @@
 #include "stdlib.h"
 #include "stdarg.h"
 
+#include "io.h"
+#include "json/types.h"
 #include "json/parser.h"
+#include "uri.h"
+
+#include "logger.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
@@ -18,44 +23,59 @@
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
+#include "unistd.h"
+
 int main(int argc, char** argv) 
 {
-	json::Parser p;
-	
-	FILE* f = fopen("test.json", "r");
+	log.init();
+	defer { log.deinit(); };
 
-	str buffer = {};
+	io::FileDescriptor out;
+	out.open(1);
 
-	fseek(f, 0, SEEK_END);
-	buffer.len = ftell(f);
-	fseek(f, 0, SEEK_SET);
+	Log::Dest::Flags flags = Log::Dest::Flags::all();
+	flags.unset(Log::Dest::Flag::ShowDateTime);
 
-	buffer.bytes = (u8*)mem.allocate(buffer.len);
+	log.new_destination("stdout"_str, &out, flags);
 
-	if (!fread(buffer.bytes, buffer.len, 1, f))
+	json::JSON json;
+	json::Parser parser;
+
+	io::FileDescriptor jsonfile;
+	if (!jsonfile.open("test.json"_str, io::Flag::Readable))
 	{
-		ERROR("failed to read test.json\n");
+		printf("failed to open test.json\n");
 		return 1;
 	}
 
-	json::JSON json;
-
-	p.init(buffer, &json, "test.json"_str);
-
-	if (!p.start())
+	if (!parser.init(&jsonfile, &json, "test.json"_str, Logger::Verbosity::Trace))
 		return 1;
 
-	p.deinit();
+	if (!parser.start())
+		return 1;
 
-	json.pretty_print();
+	io::formatv(&out, json, "\n");
 
-	return 0;
+	io::FileDescriptor testfile;
+	if (!testfile.open("temp/test.c"_str, io::Flag::Readable))
+	{
+		printf("failed to open test file\n");
+		return 1;
+	}
 
-	Lpp lpp = {};
+	io::Memory result;
 
-	lpp.input_file_name = "temp/test.c"_str;
+	Lpp lpp;
 
-	lpp.run();
+	if (!lpp.init(&testfile, &result, Logger::Verbosity::Trace))
+		return 1;
+	
+	if (!lpp.run())
+		return 1;
+
+	out.write(result.as_str());
+
+
 
 	return 0;
 }

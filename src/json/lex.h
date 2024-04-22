@@ -45,19 +45,22 @@ struct Token
 	u32 line;
 	u32 column;
 
-	utf8::str raw;
+	str raw;
 
 	static Token invalid() { return {Kind::Invalid}; }
+    b8 is_valid() { return kind != Kind::Invalid; }
 };
 
 /* ================================================================================================ json::Lexer
  */
 struct Lexer
 {
-	utf8::str stream_name;
-	utf8::str stream;
+	str stream_name;
 
-	utf8::str cursor;
+    io::Memory stream_buffer;
+    io::IO* in;
+
+	str cursor;
 	utf8::Codepoint cursor_codepoint;
 
 	u32 line;
@@ -71,12 +74,14 @@ struct Lexer
 
 	Flags flags;
 
-	b8   init(utf8::str stream, utf8::str stream_name);
+	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();
 
 	Token next_token();
 
 private:
+
+    Logger logger;
 
 	u32 current();
 
@@ -90,17 +95,17 @@ private:
 	void advance(s32 n = 1);
 	void skip_whitespace();
 
-	template<Printable... T>
+	template<io::Formattable... T>
 	Token error_here(T... args)
 	{
-		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args...);
+		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
 		return Token::invalid();
 	}
 
-	template<Printable... T>
+	template<io::Formattable... T>
 	Token error_at(u32 line, u32 column, T... args)
 	{
-		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args...);
+		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
 		return Token::invalid();
 	}
 };

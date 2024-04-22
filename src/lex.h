@@ -39,13 +39,18 @@ struct Token
 
 	Kind kind;
 
-	str raw;
-	str indentation;
+    s64 source_location;
+    s64 length;
+
+    s64 indentation_location;
+    s64 indentation_length;
 
 	int line;
 	int column;
 
 	static Token invalid() { return {Kind::Invalid}; }
+
+    b8 is_valid() { return kind != Kind::Invalid; }
 
 	static str kind_string(Kind kind)
 	{
@@ -74,12 +79,10 @@ typedef Array<Token> TokenArray;
  */
 struct Lexer
 {
-	TokenArray tokens;
+	str stream_name;
 
-	str filename;
-
-	u8* stream;
-	u8* cursor;
+    str cursor;
+    utf8::Codepoint cursor_codepoint;
 
 	s64 line;
 	s64 column;
@@ -87,18 +90,28 @@ struct Lexer
 	str indentation;
 	b8  accumulate_indentation;
 
-	Lpp* lpp;
+    io::Memory stream_buffer;
+    io::IO* in;
 
-	b8 init(Lpp* lpp, u8* stream, str filename);
-	b8 run();
+	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+    void deinit();
+        
+	Token next_token();
+
+    str get_raw(Token& t)
+    {
+        return {stream_buffer.buffer + t.source_location, t.length};
+    }
 
 private:
 
-	u8 current();
+    Logger logger;
+
+	u32 current();
+    u8* currentptr();
+
 	b8 at(u8 c);
 	b8 eof();
-	u8 next();
-	b8 next_at(u8 c);
 	b8 at_first_identifier_char();
 	b8 at_identifier_char();
 	b8 at_digit();
@@ -107,17 +120,17 @@ private:
 	void skip_whitespace();
 
 	template<typename... T>
-	b8 error_at(s64 line, s64 column, T... args)
+	Token error_at(s64 line, s64 column, T... args)
 	{
-		printv(filename, ":", line, ":", column, ": error: ", args..., "\n");
-		return false;
+        ERROR(stream_name, ":", line, ":", column, ": ", args..., "\n");
+		return Token::invalid();
 	}
 
 	template<typename... T>
-	b8 error_here(T... args)
+	Token error_here(T... args)
 	{
-		printv(filename, ":", line, ":", column, ": error: ", args..., "\n");
-		return false;
+		ERROR(stream_name, ":", line, ":", column, ": error: ", args..., "\n");
+		return Token::invalid();
 	}
 };
 

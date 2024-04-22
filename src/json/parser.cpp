@@ -2,19 +2,25 @@
 #include "logger.h"
 
 #include "stdlib.h"
+#include "assert.h"
 
 namespace json
 {
 
 /* ------------------------------------------------------------------------------------------------ json::Parser::init
  */
-b8 Parser::init(str stream, JSON* json_, str stream_name)
+b8 Parser::init(io::IO* input_stream, JSON* json_, str stream_name, Logger::Verbosity v)
 {
-	if (!lexer.init(stream, stream_name))
-		return false;
+    assert(input_stream && json_);
 
-	if (!json_)
-		return error_no_location("Parser::init() passed a null JSON object. Stream name given is '", stream_name, "'");
+    logger.init("json.parser"_str, v);
+
+    INFO("initializing with input stream ", (void*)input_stream, " and json at addr ", (void*)json_, "\n");
+    SCOPED_INDENT;
+
+    in = input_stream;
+	if (!lexer.init(input_stream, stream_name))
+		return false;
 
 	json = json_;
 

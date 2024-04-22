@@ -21,6 +21,27 @@ b8 Lexer::at_whitespace() { return isspace(current()) != 0; }
 
 void Lexer::advance(s32 n)
 {
+    auto read_stream_if_needed = [this]()
+    {
+        if (stream_buffer.at_end() ||
+            cursor.isempty())
+        {
+            u8* ptr = stream_buffer.reserve(128);
+            s64 bytes_read = in->read({ptr, 128});
+            if (!bytes_read)
+            {
+                cursor_codepoint = utf8::Codepoint::invalid();
+                error_here("failed to read more bytes from input stream");
+                return;
+            }
+            stream_buffer.commit(bytes_read);
+            cursor.bytes = ptr;
+            cursor.len = 128;
+        }
+    };
+
+    read_stream_if_needed();
+
 	for (s32 i = 0; i < n; i++)
 	{
 		if (at('\n'))
@@ -32,7 +53,15 @@ void Lexer::advance(s32 n)
 		{
 			column += 1;
 		}
+
+        read_stream_if_needed();
 		cursor_codepoint = cursor.advance();
+
+        if (!cursor_codepoint)
+        {
+            error_here("encountered invalid codepoint!");
+            return;
+        }
 	}
 }
 
@@ -44,13 +73,19 @@ void Lexer::skip_whitespace()
 
 /* ------------------------------------------------------------------------------------------------ json::Lexer::init
  */
-b8 Lexer::init(utf8::str stream, utf8::str stream_name_)
+b8 Lexer::init(io::IO* input_stream, utf8::str stream_name_, Logger::Verbosity v)
 {
-	cursor = stream;
+    logger.init("json.lexer"_str, v);
+
+    INFO("initializing with input stream ", (void*)input_stream);
+
+    in = input_stream;
 	flags = Flags::none();
 	stream_name = stream_name_;
 	line   = 1;
 	column = 0;
+
+    stream_buffer.open();
 	advance();
 
 	return true;

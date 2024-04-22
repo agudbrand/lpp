@@ -109,64 +109,65 @@ Value* JSON::new_value(Value::Kind kind)
 
 /* ------------------------------------------------------------------------------------------------ pretty_print_recur
  */
-void pretty_print_recur(Value* value, s32 depth)
+void pretty_print_recur(io::IO* out, Value* value, s32 depth)
 {
 	using enum Value::Kind;
 
 	switch (value->kind)
 	{
 		case Null: 
-			print("null");
+			out->write("null"_str);
 			return;
 		case False:
-			print("false");
+			out->write("false"_str);
 			return;
 		case True:
-			print("true");
+			out->write("true"_str);
 			return;
 		case Number:
-			print(value->number);
+            io::format(out, value->number);
 			return;
 		case String:
-			printv("\"", value->string, "\"");
+            io::formatv(out, "\"", value->string, "\"");
 			return;
 		case Array:
-			print("[\n");
+			out->write("[\n"_str);
 			for (s32 i = 0, len = value->array.values.len(); i < len; i++)
 			{
 				for (s32 i = 0; i < depth + 1; i++)
-					print(" ");
-				pretty_print_recur(value->array.values[i], depth + 2);
+					out->write(" "_str);
+				pretty_print_recur(out, value->array.values[i], depth + 2);
 				if (i != len - 1)
-					print(",");
-				print("\n");
+					out->write(","_str);
+				out->write("\n"_str);
 			}
-			for (s32 i = 0; i < depth; i++)
-				print(" ");
-			print("]");
+			for (s32 i = 0; i < depth-1; i++)
+				out->write(" "_str);
+			out->write("]"_str);
 			return;
 		case Object:
-			print("{\n");
+			out->write("{\n"_str);
 			for (auto& member : value->object.members)
 			{
 				for (s32 i = 0; i < depth + 1; i++)
-					print(" ");
-				printv("\"", member.name, "\": ");
-				pretty_print_recur(member.value, depth + 2);
-				print("\n");
+					out->write(" "_str);
+                io::formatv(out, "\"", member.name, "\": ");
+				pretty_print_recur(out, member.value, depth + 2);
+				out->write("\n"_str);
 			}
-			for (s32 i = 0; i < depth; i++)
-				print(" ");
-			print("}");
+			for (s32 i = 0; i < depth-1; i++)
+				out->write(" "_str);
+			out->write("}"_str);
 			return;
 	}
 }
 
 /* ------------------------------------------------------------------------------------------------ json::JSON::pretty_print
  */
-void JSON::pretty_print()
+s64 JSON::pretty_print(io::IO* out)
 {
-	pretty_print_recur(root, 0);
+	pretty_print_recur(out, root, 0);
+    return 0; // TODO(sushi) return number written later... maybe
 }
 
 } // namespace json
