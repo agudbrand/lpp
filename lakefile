@@ -164,3 +164,6 @@ for o_file, d_file in lake.zip(files.o, files.d) do
 	end
 end
 
+-- create an empty recipe for the 'new' system header since cpp sucks and creates a dependency
+-- for it even though it shouldn't
+lake.target("new"):recipe(function() return nil end)
