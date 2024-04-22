@@ -5,37 +5,64 @@
 
 #include "ctype.h"
 
-namespace uri
+Logger logger = Logger::create("uri"_str, Logger::Verbosity::Warn);
+
+b8 URI::init()
 {
-
-
-/* ------------------------------------------------------------------------------------------------ uri::Parser::init
- */
-b8 Parser::init(URI* uri_, str s_)
-{
-	assert(uri_);
-
-	uri = uri_;
-	string = s_;
-	cursor = s_;
-
+	scheme    = dstr::create();
+	authority = dstr::create();
+	body      = dstr::create();
 	return true;
 }
- 
-/* ------------------------------------------------------------------------------------------------ uri::Parser::deinit
- */
-void Parser::deinit()
+
+void URI::deinit()
 {
-	uri = nullptr;
-	string = cursor = {};
+	scheme.destroy();
+	authority.destroy();
+	body.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------ uri::Parser::start
- */
-b8 Parser::start()
+void URI::reset()
 {
-	assert(uri && string.bytes && cursor.bytes);
+	scheme.reset();
+	authority.reset();
+	body.reset();
 }
 
-} // namespace uri
+b8 URI::parse(URI* uri, str s_)
+{
+	str s = s_;
+
+	uri->reset();
+
+	str::pos p = s.find_first(':');
+	if (!p)
+	{
+		ERROR("URI::parse(): failed to find ':' to delimit scheme in given string '", s_, "'\n");
+		return false;
+	}
+
+	uri->scheme.append(str{s.bytes, p});
+
+	s.bytes = s.bytes + p.x + 1;
+
+	if (s.starts_with("//"_str))
+	{
+		s.bytes += 2;
+		if ((p = s.find_first('/')))
+		{
+			uri->authority.append(str{s.bytes, p});
+			s.bytes = s.bytes + p.x + 1;
+		}
+		else
+		{
+			ERROR("URI::parse(): failed to find '/' to delimit authority in given string '", s_, "'\n");
+			return false;
+		}
+	}
+
+	uri->body.append(s);
+	return true;
+}
+
 
