@@ -28,14 +28,26 @@ struct Flags
 		return out;
 	}
 
-	b8 test_all(T x)
+	b8 test_all(Flags<T> x)
 	{
-		return (flags & (FlagType)x) == (FlagType)x;
+		return (flags & x.flags) == x.flags;
 	}
 
-	b8 test_any(T x)
+	template<T... args>
+	b8 test_all()
 	{
-		return (flags & (FlagType)x);
+		return test_all(Flags<T>::from(args...));
+	}
+
+	b8 test_any(Flags<T> x)
+	{
+		return (flags & x.flags);
+	}
+
+	template<T... args>
+	b8 test_any()
+	{
+		return test_any(Flags<T>::from(args...));
 	}
 
 	b8 test(T x)
@@ -46,6 +58,11 @@ struct Flags
 	void set(T x)
 	{
 		flags |= ((FlagType)1 << (FlagType)x);
+	}
+
+	void unset(T x)
+	{
+		flags &= ~((FlagType)1 << (FlagType)x);
 	}
 };
 
