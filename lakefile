@@ -132,7 +132,11 @@ for c_file, d_file in lake.zip(files.c, files.d) do
 
 			for file in result:gmatch("%S+") do
 				if file:sub(-1) ~= ":" then
-					out = out..file.."\n"
+					-- need to manually filter out 'new' because cpp doesn't find that its a 
+					-- system header for whatever reason
+					if file ~= "new" then
+						out = out..file.."\n"
+					end
 				end
 			end
 
@@ -163,7 +167,3 @@ for o_file, d_file in lake.zip(files.o, files.d) do
 		end	
 	end
 end
-
--- create an empty recipe for the 'new' system header since cpp sucks and creates a dependency
--- for it even though it shouldn't
-lake.target("new"):recipe(function() return nil end)
