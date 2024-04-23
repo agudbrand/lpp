@@ -122,6 +122,34 @@ s64 format(IO* io, const char* x)
 	return n;
 }
 
+s64 format(IO* io, const fmt::SanitizeControlCharacters& x)
+{
+	s64 bytes_written = 0;
+	str s = x.x;
+	while (!s.isempty())
+	{
+		utf8::Codepoint c = s.advance();
+
+		switch (c.codepoint)
+		{
+			case '\a': bytes_written += io->write("\\a"_str); break;
+			case '\b': bytes_written += io->write("\\b"_str); break;
+			case '\e': bytes_written += io->write("\\e"_str); break;
+			case '\f': bytes_written += io->write("\\f"_str); break;
+			case '\n': bytes_written += io->write("\\n"_str); break;
+			case '\r': bytes_written += io->write("\\r"_str); break;
+			case '\t': bytes_written += io->write("\\t"_str); break;
+			case '\v': bytes_written += io->write("\\v"_str); break;
+			default: {
+				// lol
+				utf8::Char ch = utf8::encode_character(c.codepoint);
+				bytes_written += io->write({ch.bytes, ch.count});
+			} break;
+		}
+	}
+	return bytes_written;
+}
+
 void Memory::grow_if_needed(s64 wanted_space)
 {
 	if (space - len > wanted_space)
@@ -212,6 +240,16 @@ s64 Memory::read_from(s64 pos, str slice)
 	s64 bytes_to_read = (bytes_remaining > slice.len ? slice.len : bytes_remaining);
 	mem.copy(slice.bytes, buffer + pos, bytes_to_read);
 	return bytes_to_read;
+}
+
+Memory::Rollback Memory::create_rollback()
+{
+	return len;
+}
+
+void Memory::commit_rollback(Rollback rollback)
+{
+	len = rollback;
 }
 
 b8 FileDescriptor::open(u64 fd_)

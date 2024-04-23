@@ -47,6 +47,19 @@ s64 formatv(IO* io, T... args)
 	return accumulator;
 }
 
+namespace fmt
+{
+
+struct SanitizeControlCharacters
+{
+	const str& x;
+	SanitizeControlCharacters(const str& in) : x(in) {};
+};
+
+} // namespace fmt
+
+s64 format(IO* io, const fmt::SanitizeControlCharacters& x);
+
 enum class Flag
 {
 	Open,
@@ -137,6 +150,18 @@ struct Memory : public IO
 	s64 read(str slice) override;
 
 	s64 read_from(s64 pos, str slice) override;
+
+	/* ============================================================================================ io::Memory::Rollback
+	 *  Helper for saving a position in the memory to rollback to if the user changes their mind 
+	 *  about writing something to the buffer.
+	 *
+	 *  Obviously this is not necessary to have an api for, but I like its explicitness in what's
+	 *  going on.
+	 */
+	typedef s64 Rollback;
+
+	Rollback create_rollback();
+	void     commit_rollback(Rollback rollback);
 
 private: 
 	
