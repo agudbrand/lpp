@@ -50,6 +50,8 @@ struct Log
 			AllowColor,
 			// track the longest category name and indent all other names so that they stay aligned
 			TrackLongestName,
+			// if a logger logs a message that spans multiple lines, prefix each line with the enabled information above
+			PrefixNewlines,
 		};
 		typedef ::Flags<Flag> Flags;
 
@@ -103,6 +105,8 @@ struct Logger
 
 	b8 init(str name, Verbosity verbosity);
 
+
+
 	template<typename... T>
 	void log(Verbosity v, T... args)
 	{
@@ -110,14 +114,51 @@ struct Logger
 
 		for (Log::Dest& destination : ::log.destinations)
 		{
-			write_preamble(v, destination);
-			io::formatv(destination.io, args...);
+			if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
+			{
+				s32 counter = 1; // this is very silly
+				((log_single(v, args, destination, counter == sizeof...(T)), counter += 1), ...);
+			}
+			else
+			{
+				write_prefix(v, destination);
+				io::formatv(destination.io, args...);
+			}
 		}
 	}
 
 private:
 
-	void write_preamble(Verbosity v, Log::Dest& destination);
+	// special case where we need to handle prefixing new lines, so we need to intercept 
+	// the formatting. I need a better way to do this.
+	// TODO(sushi) make a str specialization since we dont need to format it 
+	template<typename T>
+	void log_single(Verbosity v, T arg, Log::Dest& dest, b8 last)
+	{
+		io::Memory m;
+		m.open();
+		io::format(&m, arg);
+
+		s64 linelen = 0;
+		for (s64 i = 0; i < m.len; i++)
+		{
+			if (m.buffer[i] == '\n')
+			{
+				dest.io->write({m.buffer + i - linelen, linelen+1});
+				if (i != m.len || !last)
+				{
+					write_prefix(v, dest);
+				}
+				linelen = 0;
+			}
+			else
+				linelen += 1;
+		}
+
+		m.close();
+	}
+
+	void write_prefix(Verbosity v, Log::Dest& destination);
 
 };
 

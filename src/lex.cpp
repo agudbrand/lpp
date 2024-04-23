@@ -134,6 +134,7 @@ Token Lexer::next_token()
         t.kind = kind;
         t.length = len + len_offset;
         t.indentation_location = 0;
+		last_token_kind = kind;
 	};
 
 	reset_token();
@@ -143,142 +144,156 @@ Token Lexer::next_token()
 
     skip_whitespace();
 
-    if (at('@')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - @
-    {
-        DEBUG("found '@'\n");
+	switch (last_token_kind)
+	{
+		case MacroSymbol: {
+			if (not at_first_identifier_char())
+				return error_here("expected an identifier of a macro after '@'");
 
-        advance();
-        finish_token(MacroSymbol);
+			while (at_identifier_char())
+				advance();
 
-        skip_whitespace();
-        reset_token();
+			finish_token(MacroIdentifier);
 
-        if (not at_first_identifier_char())
-            return error_here("expected an identifier of a macro after '@'");
+			skip_whitespace();
 
-        while (at_identifier_char())
-            advance();
+			switch (current())
+			{
+				case '(': {
+					TRACE("macro uses tuple parameter\n");
+					advance();
+					skip_whitespace();
 
-        finish_token(MacroIdentifier);
+					// if we find an empty tuple just move on w/o making a token
+					if (at(')'))
+					{
+						advance();
+						reset_token();
+						break;
+					}
 
-        skip_whitespace();
+					for (;;)
+					{
+						reset_token();
 
-        switch (current())
-        {
-            case '(': {
-                TRACE("macro uses tuple parameter\n");
-                advance();
-                skip_whitespace();
+						while (not at(',') and 
+							   not at(')') and 
+							   not eof())
+							advance();
 
-                // if we find an empty tuple just move on w/o making a token
-                if (at(')'))
-                {
-                    advance();
-                    reset_token();
-                    break;
-                }
+						if (eof())
+							return error_at(t.line, t.column, "unexpected eof while consuming macro arguments");
 
-                for (;;)
-                {
-                    reset_token();
+						finish_token(MacroArgumentTupleArg);
 
-                    while (not at(',') and 
-                           not at(')') and 
-                           not eof())
-                        advance();
+						if (at(')'))
+							break;
 
-                    if (eof())
-                        return error_at(t.line, t.column, "unexpected eof while consuming macro arguments");
+						advance();
+						skip_whitespace();
+					}
 
-                    finish_token(MacroArgumentTupleArg);
+					advance();
+					reset_token();
+				} break;
+			}
 
-                    if (at(')'))
-                        break;
+		} break;
 
-                    advance();
-                    skip_whitespace();
-                }
+		case MacroIdentifier: {
 
-                advance();
-                reset_token();
-            } break;
-        }
-    }
-    else if (at('$')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - $
-    {
-        DEBUG("found '$'\n");
-        advance();
-        if (at('$'))
-        {
-            advance();
-            if (at('$'))
-            {
-                advance();
-                reset_token();
-                TRACE("found lua block\n");
-                // this is a lua block, scan until we hit another 3 $ in a row
-                for (;;)
-                {
-                    if ((advance(), at('$')) and
-                        (advance(), at('$')) and
-                        (advance(), at('$')))
-                    {
-                        advance(); 
-                        finish_token(LuaBlock, -3);
-                        break;
-                    }
+		} break;
 
-                    if (eof())
-                        return error_at(t.line, t.column, "unexpected eof while consuming lua block (eg. code that starts with '$$$')");
-                }
-            }
-            else
-            {
-                // dont handle this case for now
-                // TODO(sushi) decide what should be done in this case later on
-                return error_here("two of '$' in a row is unrecognized!");
-            }
-        }
-        else if (at('('))
-        {
-            TRACE("found inline lua\n");
-            // TODO(sushi) idrk if we'd wanna support whitespace between the $ and ( here but for now i wont allow it for simplicity
-            advance();
-            reset_token();
+		case MacroArgumentTupleArg: {
 
-            while (not at(')') and not eof())
-                advance();
+		} break;
 
-            if (eof())
-                return error_at(t.line, t.column, "unexpected eof while consuming inline lua (eg. code of the form $(...))");
+		default: {
+			if (at('@')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - @
+			{
+				DEBUG("found '@'\n");
 
-            advance();
-            finish_token(LuaInline, -1);
-        }
-        else
-        {
-            TRACE("found lua line\n");
-            reset_token();
-            while (not at('\n') and not eof())
-                advance();
+				advance();
+				finish_token(MacroSymbol);
+			}
+			else if (at('$')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - $
+			{
+				DEBUG("found '$'\n");
+				advance();
+				if (at('$'))
+				{
+					advance();
+					if (at('$'))
+					{
+						advance();
+						reset_token();
+						TRACE("found lua block\n");
+						// this is a lua block, scan until we hit another 3 $ in a row
+						for (;;)
+						{
+							if ((advance(), at('$')) and
+								(advance(), at('$')) and
+								(advance(), at('$')))
+							{
+								advance(); 
+								finish_token(LuaBlock, -3);
+								break;
+							}
 
-            finish_token(LuaLine);
+							if (eof())
+								return error_at(t.line, t.column, "unexpected eof while consuming lua block (eg. code that starts with '$$$')");
+						}
+					}
+					else
+					{
+						// dont handle this case for now
+						// TODO(sushi) decide what should be done in this case later on
+						return error_here("two of '$' in a row is unrecognized!");
+					}
+				}
+				else if (at('('))
+				{
+					TRACE("found inline lua\n");
+					// TODO(sushi) idrk if we'd wanna support whitespace between the $ and ( here but for now i wont allow it for simplicity
+					advance();
+					reset_token();
 
-            if (not eof())
-                advance();
-        }
-    }
-    else
-    {
-        while (not at('@') and
-               not at('$') and 
-               not eof())
-            advance();
+					while (not at(')') and not eof())
+						advance();
 
-        DEBUG("subject token\n");
+					if (eof())
+						return error_at(t.line, t.column, "unexpected eof while consuming inline lua (eg. code of the form $(...))");
 
-        finish_token(Subject);
-    }
+					advance();
+					finish_token(LuaInline, -1);
+				}
+				else
+				{
+					TRACE("found lua line\n");
+					reset_token();
+					while (not at('\n') and not eof())
+						advance();
+
+					finish_token(LuaLine);
+
+					if (not eof())
+						advance();
+				}
+			}
+			else
+			{
+				while (not at('@') and
+					   not at('$') and 
+					   not eof())
+					advance();
+
+				DEBUG("subject token\n");
+
+				finish_token(Subject);
+			}
+		} break;
+	}
+
 
 	return t;
 }

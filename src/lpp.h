@@ -15,13 +15,6 @@ struct lua_State;
 
 struct Lpp
 {
-	str input_file_name;
-	str output_file_name;
-
-	b8 use_color;
- 
-	dstr metaprogram;
-
 	Lexer lexer;
 
 	lua_State* L;

@@ -25,57 +25,35 @@ DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
 #include "unistd.h"
 
+#include "generated/cliargs.h"
+
 int main(int argc, char** argv) 
 {
 	log.init();
 	defer { log.deinit(); };
 
+	Logger logger;
+	logger.init("lpp"_str, Logger::Verbosity::Trace);
+
 	io::FileDescriptor out;
 	out.open(1);
+	defer { out.close(); };
 
-	Log::Dest::Flags flags = Log::Dest::Flags::all();
-	flags.unset(Log::Dest::Flag::ShowDateTime);
+	log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
 
-	log.new_destination("stdout"_str, &out, flags);
+	logger.log(Logger::Verbosity::Trace, "hello\nthere\nman!");
 
-	json::JSON json;
-	json::Parser parser;
-
-	io::FileDescriptor jsonfile;
-	if (!jsonfile.open("test.json"_str, io::Flag::Readable))
-	{
-		printf("failed to open test.json\n");
+	io::FileDescriptor testcpp;
+	if (!testcpp.open("test.lpp"_str, io::Flag::Readable))
 		return 1;
-	}
-
-	if (!parser.init(&jsonfile, &json, "test.json"_str, Logger::Verbosity::Trace))
-		return 1;
-
-	if (!parser.start())
-		return 1;
-
-	io::formatv(&out, json, "\n");
-
-	io::FileDescriptor testfile;
-	if (!testfile.open("temp/test.c"_str, io::Flag::Readable))
-	{
-		printf("failed to open test file\n");
-		return 1;
-	}
-
-	io::Memory result;
+	defer { testcpp.close(); };
 
 	Lpp lpp;
-
-	if (!lpp.init(&testfile, &result, Logger::Verbosity::Trace))
+	if (!lpp.init(&testcpp, &out, logger.verbosity))
 		return 1;
-	
+
 	if (!lpp.run())
 		return 1;
-
-	out.write(result.as_str());
-
-
 
 	return 0;
 }

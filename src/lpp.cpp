@@ -46,37 +46,6 @@ b8 Lpp::run()
     io::Memory metaprogram;
     metaprogram.open();
 
-	auto build_subject = [&metaprogram](u8* s, s32 len)
-	{
-        io::format(&metaprogram, "__SUBJECT(\""_str);
-
-		for (s32 i = 0; i < len; i++)
-		{
-			u8 c = s[i];
-
-			if (iscntrl(c))
-				io::formatv(&metaprogram, "\\", c);
-			else if (c == '"')
-				io::formatv(&metaprogram, "\\", '"');
-			else if (c == '\\')
-				io::formatv(&metaprogram, "\\\\");
-			else
-				io::formatv(&metaprogram, (char)c);
-		}
-
-        io::format(&metaprogram, "\")\n");
-	};
-
-	auto build_metalua = [&metaprogram](u8* s, s32 len)
-	{
-        io::format(&metaprogram, str{s, len});
-	};
-
-	auto build_metalua_line = [&metaprogram](u8* s, s32 len)
-	{
-        io::formatv(&metaprogram, str{s, len}, "\n");
-	};
-
     Token curt;
     s64 idx = -1;
 
@@ -90,11 +59,11 @@ b8 Lpp::run()
 	
     INFO("starting parse\n");
 
+    next_token();
+
 	for (;;)
 	{
 		using enum Token::Kind;
-
-        next_token();
 
         if (!curt.is_valid())
             return false;
@@ -105,7 +74,9 @@ b8 Lpp::run()
 		switch (curt.kind)
 		{
 			case Subject: {
-                io::format(&metaprogram, "__SUBJECT(\""_str);
+				TRACE("placing subject: '", io::fmt::SanitizeControlCharacters(lexer.get_raw(curt)), "'\n");
+
+				io::format(&metaprogram, "__SUBJECT(\""_str);
 
 				for (u8 c : lexer.get_raw(curt))
 				{
@@ -118,15 +89,15 @@ b8 Lpp::run()
 					else
 						io::format(&metaprogram, (char)c);
 				}
-
 				metaprogram.write("\")\n"_str);
-
                 next_token();
 			} break;
 
 			case LuaLine: 
-                TRACE("placing lua line: '", lexer.get_raw(curt), "'\n");
-                io::formatv(&metaprogram, lexer.get_raw(curt), "\n");
+                TRACE("placing lua line: '", io::fmt::SanitizeControlCharacters(lexer.get_raw(curt)), "'\n");
+				// cleanup any whitespace preceeding this token to keep formatting correct
+				io::formatv(&metaprogram, lexer.get_raw(curt), "\n");
+
 				next_token();
 				break;
 
@@ -189,7 +160,7 @@ b8 Lpp::run()
 		return false;
 	}
 
-	if (luaL_loadfile(L, "src/lpp/metaenv.lua"))
+	if (luaL_loadfile(L, "src/metaenv.lua"))
 	{
 		ERROR("failed to load metaevironment:\n", lua_tostring(L, -1), "\n");
 		return false;
@@ -220,7 +191,10 @@ b8 Lpp::run()
 		return false;
 	}
 
-	INFO(lua_tostring(L, -1), "\n");
+	size_t len;
+	const char* s = lua_tolstring(L, -1, &len);
+
+	out->write({(u8*)s, s64(len)});
 
 	return true;
 }

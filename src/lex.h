@@ -93,6 +93,8 @@ struct Lexer
     io::Memory stream_buffer;
     io::IO* in;
 
+	Token::Kind last_token_kind;
+
 	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
     void deinit();
         

@@ -76,7 +76,7 @@ str try_color(Log::Dest& d, Color col)
 
 /* ------------------------------------------------------------------------------------------------ Logger::write_preamble
  */
-void Logger::write_preamble(Verbosity v, Log::Dest& d)
+void Logger::write_prefix(Verbosity v, Log::Dest& d)
 {
     using enum Log::Dest::Flag;
 
