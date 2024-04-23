@@ -16,6 +16,10 @@ compiler     := "clang++"
 linker       := "clang++"
 preprocessor := "cpp"
 
+string.starts_with = function(self, s)
+	return self:sub(1,#s) == s
+end
+
 compiler_flags := 
 $[
 
@@ -135,6 +139,9 @@ for c_file, d_file in lake.zip(files.c, files.d) do
 					-- need to manually filter out 'new' because cpp doesn't find that its a 
 					-- system header for whatever reason
 					if file ~= "new" then
+						if file:starts_with("generated") then
+							out = out.."src/"
+						end
 						out = out..file.."\n"
 					end
 				end
@@ -167,3 +174,20 @@ for o_file, d_file in lake.zip(files.o, files.d) do
 		end	
 	end
 end
+
+script_target := function(scriptname, outname)
+	spath := "src/scripts/"..scriptname
+	opath := "src/generated/"..outname
+	lake.target(opath)
+		:depends_on(spath)
+		:recipe(function()
+			result := ` luajit $(spath) `
+			if result.exit_status == 0 then
+				io.write(green, spath, reset, " -> ", blue, opath, reset, "\n", result.stdout, "\n")
+			else
+				io.write(red, "failed to run script ", blue, spath, reset, ": \n", result.stdout, "\n")
+			end
+		end)
+end
+
+script_target("cliargs.lua", "cliargs.h")
