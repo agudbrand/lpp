@@ -138,7 +138,8 @@ for c_file, d_file in lake.zip(files.c, files.d) do
 				if file:sub(-1) ~= ":" then
 					-- need to manually filter out 'new' because cpp doesn't find that its a 
 					-- system header for whatever reason
-					if file ~= "new" then
+					if file ~= "new" and
+					   file ~= "csetjmp" then
 						if file:starts_with("generated") then
 							out = out.."src/"
 						end

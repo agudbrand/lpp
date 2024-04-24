@@ -51,6 +51,7 @@ struct Log
 			// track the longest category name and indent all other names so that they stay aligned
 			TrackLongestName,
 			// if a logger logs a message that spans multiple lines, prefix each line with the enabled information above
+			// TODO(sushi) implement this eventually its not that important
 			PrefixNewlines,
 		};
 		typedef ::Flags<Flag> Flags;
@@ -105,8 +106,6 @@ struct Logger
 
 	b8 init(str name, Verbosity verbosity);
 
-
-
 	template<typename... T>
 	void log(Verbosity v, T... args)
 	{
@@ -114,16 +113,8 @@ struct Logger
 
 		for (Log::Dest& destination : ::log.destinations)
 		{
-			if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
-			{
-				s32 counter = 1; // this is very silly
-				((log_single(v, args, destination, counter == sizeof...(T)), counter += 1), ...);
-			}
-			else
-			{
-				write_prefix(v, destination);
-				io::formatv(destination.io, args...);
-			}
+			write_prefix(v, destination);
+			io::formatv(destination.io, args...);
 		}
 	}
 
@@ -132,31 +123,36 @@ private:
 	// special case where we need to handle prefixing new lines, so we need to intercept 
 	// the formatting. I need a better way to do this.
 	// TODO(sushi) make a str specialization since we dont need to format it 
-	template<typename T>
-	void log_single(Verbosity v, T arg, Log::Dest& dest, b8 last)
-	{
-		io::Memory m;
-		m.open();
-		io::format(&m, arg);
-
-		s64 linelen = 0;
-		for (s64 i = 0; i < m.len; i++)
-		{
-			if (m.buffer[i] == '\n')
-			{
-				dest.io->write({m.buffer + i - linelen, linelen+1});
-				if (i != m.len || !last)
-				{
-					write_prefix(v, dest);
-				}
-				linelen = 0;
-			}
-			else
-				linelen += 1;
-		}
-
-		m.close();
-	}
+	// this is wrong and not working and i dont feel like fixing it atm
+	//
+	// it would probably be easier if i moved towards things emitting formatting 
+	// via an iterator so i could stream each char and just check for newlines 
+	// but that would make the whole formatting stuff so much more complex i think
+//	template<typename T>
+//	void log_single(Verbosity v, T arg, Log::Dest& dest, b8 last)
+//	{
+//		io::Memory m;
+//		m.open();
+//		io::format(&m, arg);
+//
+//		s64 linelen = 0;
+//		for (s64 i = 0; i < m.len; i++)
+//		{
+//			if (m.buffer[i] == '\n')
+//			{
+//				dest.io->write({m.buffer + i - linelen, linelen+1});
+//				if (i != m.len || !last)
+//				{
+//					write_prefix(v, dest);
+//				}
+//				linelen = 0;
+//			}
+//			else
+//				linelen += 1;
+//		}
+//
+//		m.close();
+//	}
 
 	void write_prefix(Verbosity v, Log::Dest& destination);
 

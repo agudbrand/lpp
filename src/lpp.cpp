@@ -3,7 +3,6 @@
 #include "logger.h"
 
 #include "stdio.h"
-#include "ctype.h"
 
 extern "C"
 {
@@ -16,164 +15,103 @@ extern "C"
 
 /* ------------------------------------------------------------------------------------------------ Lpp::init
  */
-b8 Lpp::init(io::IO* input_stream, io::IO* output_stream, Logger::Verbosity verbosity)
+b8 Lpp::init(Logger::Verbosity verbosity)
 {
-    assert(input_stream && output_stream);
-
     logger.init("lpp"_str, verbosity);
 
-    TRACE("initializing with input stream ", (void*)input_stream, " and output stream ", (void*)output_stream, "\n");
-    SCOPED_INDENT;
+	INFO("init");
 
-    tokens = Array<Token>::create();
-    in = input_stream;
-    out = output_stream;
+	DEBUG("creating lua state\n");
+	L = lua_open();
+	luaL_openlibs(L);
 
-    DEBUG("initializing lexer\n");
-    if (!lexer.init(input_stream, ""_str, verbosity))
-        return false;
+	if (!cache_metaenvironment())
+		return false;
 
     return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::run
+/* ------------------------------------------------------------------------------------------------ Lpp::init
  */
-b8 Lpp::run()
+void Lpp::deinit()
 {
-    INFO("running lpp\n");
+	lua_close(L);
+	metaenv_chunk.close();
+}
 
-    DEBUG("opening metaprogram buffer\n");
-    io::Memory metaprogram;
-    metaprogram.open();
+/* ------------------------------------------------------------------------------------------------ Lpp::create_metaprogram
+ */
+b8 Lpp::create_metaprogram(
+		str     name,
+		io::IO* input_stream, 
+		io::IO* output_stream)
+{
+	INFO("creating metaprogram from input stream '", name, "'\n");
 
-    Token curt;
-    s64 idx = -1;
+	Parser parser;
+	if (!parser.init(input_stream, name, output_stream, logger.verbosity))
+		return false;
 
-    auto next_token = [&idx, &curt, this]()
-    {
-        curt = lexer.next_token();
-        idx += 1;
-        tokens.push(curt);
-        return curt.kind != Token::Kind::Eof;
-    };
-	
-    INFO("starting parse\n");
-
-    next_token();
-
-	for (;;)
+	if (setjmp(parser.err_handler))
 	{
-		using enum Token::Kind;
-
-        if (!curt.is_valid())
-            return false;
-
-		if (curt.kind == Eof)
-			break;
-
-		switch (curt.kind)
-		{
-			case Subject: {
-				TRACE("placing subject: '", io::fmt::SanitizeControlCharacters(lexer.get_raw(curt)), "'\n");
-
-				io::format(&metaprogram, "__SUBJECT(\""_str);
-
-				for (u8 c : lexer.get_raw(curt))
-				{
-					if (iscntrl(c))
-						io::formatv(&metaprogram, "\\"_str, c);
-					else if (c == '"')
-						io::format(&metaprogram, "\\\""_str);
-					else if (c == '\\')
-						io::format(&metaprogram, "\\\\"_str);
-					else
-						io::format(&metaprogram, (char)c);
-				}
-				metaprogram.write("\")\n"_str);
-                next_token();
-			} break;
-
-			case LuaLine: 
-                TRACE("placing lua line: '", io::fmt::SanitizeControlCharacters(lexer.get_raw(curt)), "'\n");
-				// cleanup any whitespace preceeding this token to keep formatting correct
-				io::formatv(&metaprogram, lexer.get_raw(curt), "\n");
-
-				next_token();
-				break;
-
-			case LuaBlock:
-                io::format(&metaprogram, lexer.get_raw(curt));
-				next_token();
-				break;
-
-			case LuaInline:
-                io::formatv(&metaprogram, "__SUBJECT(__VAL("_str, lexer.get_raw(curt), "))\n"_str);
-				next_token();
-				break;
-
-			case MacroSymbol: {
-                io::formatv(&metaprogram,
-                        "__SET_MACRO_TOKEN_INDEX("_str, idx, ")\n",
-                        "__SUBJECT(__MACRO("_str);
-				
-				next_token(); // identifier
-                io::format(&metaprogram, lexer.get_raw(curt));
-
-				if (next_token() && curt.kind == MacroArgumentTupleArg)
-				{
-                    io::format(&metaprogram, '(');
-					if (curt.kind == MacroArgumentTupleArg)
-					{
-						for (;;)
-						{
-                            io::formatv(&metaprogram, '"', lexer.get_raw(curt), '"');
-
-							if (next_token())
-							{
-								if (curt.kind != MacroArgumentTupleArg)
-									break;
-
-                                io::format(&metaprogram, ',');
-							}
-							else
-								break;
-						}
-					}
-                    io::format(&metaprogram, ')');
-				}
-
-                io::format(&metaprogram, "))\n"_str);
-			} break;
-		}
-	}
-
-    io::format(&metaprogram, "return __FINAL()\n");
-
-    INFO(metaprogram.as_str(), "\n\n--------------------\n\n");
-
-	lua_State* L = lua_open();
-	luaL_openlibs(L);
-
-	if (luaL_loadbuffer(L, (char*)metaprogram.buffer, metaprogram.len, "metaprogram"))
-	{
-		ERROR("failed to load metaprogram:\n", lua_tostring(L, -1), "\n");
+		parser.deinit();
 		return false;
 	}
 
-	if (luaL_loadfile(L, "src/metaenv.lua"))
+	if (!parser.run())
+		return false;
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ metaprogram_reader
+ */
+struct ReaderData
+{
+	u8* buffer;
+	io::IO* io;
+};
+
+static const s64 reader_buffer_size = 256;
+
+const char* metaprogram_reader(lua_State* L, void* data, size_t* size)
+{
+	ReaderData* in = (ReaderData*)data;
+	*size = in->io->read({in->buffer, reader_buffer_size});
+	return (const char*)in->buffer;
+}
+
+/* ------------------------------------------------------------------------------------------------ Lpp::run_metaprogram
+ */
+b8 Lpp::run_metaprogram(
+		str     name,
+		io::IO* input_stream, 
+		io::IO* output_stream)
+{
+	INFO("running metaprogram '", name, "'\n");
+
+	u8 reader_buffer[reader_buffer_size];
+	ReaderData data = {reader_buffer, input_stream};
+
+	if (lua_load(L, metaprogram_reader, &data, (char*)name.bytes)) // TODO(sushi) idk handle non null-terminated names later if its ever needed
 	{
-		ERROR("failed to load metaevironment:\n", lua_tostring(L, -1), "\n");
+		ERROR("failed to load metaprogram '", name, "':\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
 		return false;
 	}
+
+	if (!load_metaenvironment())
+		return false;
 
 	if (lua_pcall(L, 0, 2, 0))
 	{
 		ERROR("failed to run metaenvironment:\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
 		return false;
 	}
 
 	// the lpp table is at the top of the stack and we need to give it 
-	// a handle this this context
+	// a handle to this context
 	lua_pushstring(L, "handle");
 	lua_pushlightuserdata(L, this);
 	lua_settable(L, -3);
@@ -181,24 +119,91 @@ b8 Lpp::run()
 
 	if (!lua_setfenv(L, 1))
 	{
-		ERROR("failed to set environment of metaprogram:\n", lua_tostring(L, -1), "\n");
+		ERROR("failed to set environment of metaprogram '", name, "':\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
 		return false;
 	}
 
 	if (lua_pcall(L, 0, 1, 0))
 	{
 		ERROR("failed to run metaprogram:\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
 		return false;
 	}
 
 	size_t len;
 	const char* s = lua_tolstring(L, -1, &len);
 
-	out->write({(u8*)s, s64(len)});
+	output_stream->write({(u8*)s, (s64)len});
 
 	return true;
 }
 
+/* ------------------------------------------------------------------------------------------------ Lpp::cache_writer
+ */
+int Lpp::cache_writer(lua_State* L, const void* p, size_t sz, void* ud)
+{
+	Lpp* lpp = (Lpp*)ud;
+
+	if (!lpp->metaenv_chunk.write({(u8*)p, (s64)sz}))
+		return 1;
+
+	return 0;
+}
+
+/* ------------------------------------------------------------------------------------------------ Lpp::cache_metaenvironment
+ */
+b8 Lpp::cache_metaenvironment()
+{
+	DEBUG("caching metaenvironment\n");
+
+	if (luaL_loadfile(L, "src/metaenv.lua"))
+	{
+		ERROR("failed to load metaenvironment:\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
+		return false;
+	}
+
+	
+	DEBUG("initializing metaenv chunk\n");
+	metaenv_chunk.open();
+
+	DEBUG("dumping metaenvironment\n");
+	if (lua_dump(L, cache_writer, this))
+	{
+		ERROR("failed to dump metaenvironment\n");
+		return false;
+	}
+
+	lua_pop(L, 1);
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ metaenvironment_loader
+ */
+const char* metaenvironment_loader(lua_State* L, void* data, size_t* size)
+{
+	io::Memory* m = (io::Memory*)data;
+	*size = m->len;
+	return (const char*)m->buffer;
+}
+
+/* ------------------------------------------------------------------------------------------------ Lpp::load_metaenvironment
+ */
+b8 Lpp::load_metaenvironment()
+{
+	if (lua_load(L, metaenvironment_loader, &metaenv_chunk, "metaenvironment"))
+	{
+		ERROR("failed to load cached metaenvironment:\n", lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
+		return false;
+	}
+}
+
+/* ================================================================================================ lua C API
+ *  C api exposed to the internal lpp module 
+ */
 extern "C"
 {
 
@@ -207,4 +212,29 @@ str get_token_indentation(Lpp* lpp, s32 idx)
 	return ""_str; //lpp->tokens[idx].indentation;
 }
 
+struct ParseContext
+{
+	
+};
+
+void* parse_file(Lpp* lpp, str name)
+{
+	io::FileDescriptor f;
+	if (!f.open(name, io::Flag::Readable))
+		return str::invalid();
+
+	io::Memory mp;
+	mp.open();
+
+	if (!lpp->create_metaprogram(name, &f, &m))
+		return str::invalid();
+
+	io::Memory fin;
+	fin.open(mp.len);
+
+
 }
+
+}
+
+

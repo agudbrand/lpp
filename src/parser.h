@@ -1,0 +1,48 @@
+/*
+ *  Parser for lpp files. Takes tokens and transforms them into a metaprogram.
+ */
+
+#ifndef _lpp_parser_h
+#define _lpp_parser_h
+
+#include "common.h"
+#include "lex.h"
+#include "csetjmp"
+
+struct Parser
+{
+	Logger logger;
+
+	Array<Token> tokens;
+
+	Lexer lexer;
+
+	Token curt;
+
+	io::IO* in;
+	io::IO* out;
+
+	jmp_buf err_handler;
+
+	b8   init(io::IO* input_stream, str stream_name, io::IO* out, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+	void deinit();
+
+	b8 run();
+
+private:
+
+	b8 next_token();
+
+	b8 at(Token::Kind kind);
+
+	str get_raw();
+
+	template<typename... T>
+	void write_out(T... args)
+	{
+		io::formatv(out, args...);
+	}
+
+};
+
+#endif // _lpp_parser_h

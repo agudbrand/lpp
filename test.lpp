@@ -1,0 +1,35 @@
+
+
+$$$
+
+local loggerid = "lpp"
+
+local verbosity =
+{
+	trace = 0,
+	debug = 1,
+	info = 2,
+	notice = 3,
+	warn = 4,
+	error = 5,
+	fatal = 6
+}
+
+local trace = function(...)
+	local out = "if ((u32)"..loggerid..".verbosity <= (u32)Logger::Verbosity::Trace) "..loggerid..".log(Logger::Verbosity::Trace"
+	local args = {...}
+	for i=1,#args do
+		out = out..", \""..args[i].."\""
+	end
+	out = out..")"
+	return out
+end	
+
+
+$$$
+
+int main()
+{
+	@trace(hello!)
+}
+

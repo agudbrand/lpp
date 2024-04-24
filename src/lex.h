@@ -9,6 +9,8 @@
 #include "array.h"
 #include "logger.h"
 
+#include "csetjmp"
+
 struct Lpp;
 
 /* ================================================================================================ Token
@@ -79,6 +81,8 @@ typedef Array<Token> TokenArray;
  */
 struct Lexer
 {
+	using enum Token::Kind;
+
 	str stream_name;
 
     str cursor;
@@ -95,6 +99,8 @@ struct Lexer
 
 	Token::Kind last_token_kind;
 
+	jmp_buf err_handler;
+
 	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
     void deinit();
         
@@ -109,6 +115,16 @@ private:
 
     Logger logger;
 
+	Token curt;
+
+	void init_curt();
+	void finish_curt(Token::Kind kind, s32 len_offset = 0);
+
+	b8 consume_document_text();
+	b8 consume_lua_code(); // $
+	b8 consume_macro_identifier(); // @
+	b8 consume_macro_tuple_argument();
+
 	u32 current();
     u8* currentptr();
 
@@ -122,18 +138,19 @@ private:
 	void skip_whitespace();
 
 	template<typename... T>
-	Token error_at(s64 line, s64 column, T... args)
+	b8 error_at(s64 line, s64 column, T... args)
 	{
         ERROR(stream_name, ":", line, ":", column, ": ", args..., "\n");
-		return Token::invalid();
+		return false;
 	}
 
 	template<typename... T>
-	Token error_here(T... args)
+	b8 error_here(T... args)
 	{
 		ERROR(stream_name, ":", line, ":", column, ": error: ", args..., "\n");
-		return Token::invalid();
+		return false;
 	}
+
 };
 
 /* ================================================================================================ TokenIterator

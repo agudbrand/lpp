@@ -75,6 +75,9 @@ struct str
 	u8* bytes;
 	s64 len;
 
+	static str invalid() { return {nullptr}; }
+	b8 is_valid() { return bytes != nullptr; }
+
 	b8 isempty();
 
 	u64 hash();
