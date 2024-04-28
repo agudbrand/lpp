@@ -20,10 +20,10 @@ void Lexer::advance(s32 n)
 {
     auto read_stream_if_needed = [this]()
     {
-        if (stream_buffer.at_end() ||
+        if (source->cache.at_end() ||
             cursor.isempty())
         {
-            u8* ptr = stream_buffer.reserve(128);
+            u8* ptr = source->cache.reserve(128);
             s64 bytes_read = in->read({ptr, 128});
             if (!bytes_read)
             {
@@ -31,7 +31,7 @@ void Lexer::advance(s32 n)
                 error_here("failed to read more bytes from input stream");
 				longjmp(err_handler, 0);
             }
-            stream_buffer.commit(bytes_read);
+            source->cache.commit(bytes_read);
             cursor.bytes = ptr;
             cursor.len = 128;
         }
@@ -41,34 +41,26 @@ void Lexer::advance(s32 n)
 
 	for (s32 i = 0; i < n; i++)
 	{
-		if (at('\n'))
-		{
-			line  += 1;
-			column = 1;
-			indentation = {cursor.bytes, 0};
-			accumulate_indentation = true;
-		}
-		else
-		{
-			column += 1;
-			if (accumulate_indentation)
-			{
-				if (not isspace(current()))
-					accumulate_indentation = false;
-				else
-					indentation.len += 1;
-			}
-		
-        }
-
         read_stream_if_needed();
         cursor_codepoint = cursor.advance();
 
         if (!cursor_codepoint)
         {
             error_here("encountered invalid codepoint!");
-            return;
+            longjmp(err_handler, 0);
         }
+
+		if (at('\n'))
+		{
+			in_indentation = true;
+			source->line_offsets.push(cursor.bytes - source->cache.buffer + 1);
+		}
+		else if (in_indentation)
+		{
+			if (not isspace(current()))
+				in_indentation = false;
+		}
+        
 	}
 }
 
@@ -80,21 +72,18 @@ void Lexer::skip_whitespace()
 
 /* ------------------------------------------------------------------------------------------------ Lexer::init
  */
-b8 Lexer::init(io::IO* input_stream, str stream_name_, Logger::Verbosity verbosity)
+b8 Lexer::init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity)
 {
     assert(input_stream);
 
     logger.init("lpp.lexer"_str, verbosity);
 
-    TRACE("initializing with input stream '", stream_name, "'\n");
+    TRACE("initializing with input stream '", src->name, "'\n");
 	SCOPED_INDENT;
 
     in = input_stream;
-	line = 1;
-    column = 0;
-    stream_name = stream_name_;
+	source = src;
 
-    stream_buffer.open();
     advance();
 
 	return true;
@@ -104,9 +93,7 @@ b8 Lexer::init(io::IO* input_stream, str stream_name_, Logger::Verbosity verbosi
  */
 void Lexer::deinit()
 {
-    stream_buffer.close();
-	stream_name = {};
-	in = nullptr;
+	*this = {};
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::next_token
@@ -151,13 +138,32 @@ Token Lexer::next_token()
 						if (!consume_document_text())
 							return Token::invalid();
 					}
-					if (!consume_macro_tuple_argument())
+					else if (!consume_macro_tuple_argument())
 						return Token::invalid();
 					break;
 
 				default:
 					if (!consume_document_text())
 						return Token::invalid();
+					break;
+
+				case '"':
+					advance();
+					init_curt();
+					for (;;)
+					{
+						advance();
+						if (eof())
+						{
+							error_at_token(curt, "unexpected end of file while consuming macro string argument");
+							return Token::invalid();
+						}
+
+						if (at('"'))
+							break;
+					}
+					finish_curt(MacroArgumentString);
+					advance();
 					break;
 			}
 			break;
@@ -194,22 +200,17 @@ Token Lexer::next_token()
 void Lexer::init_curt()
 {
 	curt.kind = Token::Kind::Eof;
-	curt.line = line;
-	curt.column = column;
-	curt.source_location = currentptr() - stream_buffer.buffer;
-	curt.indentation_length = -1;
+	curt.source_location = currentptr() - source->cache.buffer;
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::finish_token
  */
 void Lexer::finish_curt(Token::Kind kind, s32 len_offset)
 {
-	s32 len = (currentptr() - stream_buffer.buffer) - curt.source_location;
+	s32 len = (currentptr() - source->cache.buffer) - curt.source_location;
 	curt.kind = kind;
 	curt.length = len + len_offset;
-	curt.indentation_location = 0;
 	last_token_kind = kind;
-	
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::consume_document_text
@@ -223,7 +224,7 @@ b8 Lexer::consume_document_text()
 		   not eof())
 		advance();
 
-	finish_curt(Subject);
+	finish_curt(Document);
 
 	return true;
 }
@@ -252,7 +253,7 @@ b8 Lexer::consume_lua_code()
 				}
 
 				if (eof())
-					return error_at(curt.line, curt.column, "unexpected eof while consuming lua block");
+					return error_at_token(curt, "unexpected eof while consuming lua block");
 			}
 		}
 		else
@@ -267,11 +268,24 @@ b8 Lexer::consume_lua_code()
 		advance();
 		init_curt();
 
-		while (not at(')') and not eof())
+		s64 nesting = 1;
+
+		for (;;)
+		{
 			advance();
+			if      (eof()) break;
+			else if (at('(')) nesting += 1;
+			else if (at(')'))
+			{
+				if (nesting == 1)
+					break;
+				else
+					nesting -= 1;
+			}
+		}
 
 		if (eof())
-			return error_at(curt.line, curt.column, "unexpected eof while consuming inline lua");
+			return error_at_token(curt, "unexpected eof while consuming inline lua");
 
 		advance();
 		finish_curt(LuaInline, -1);
@@ -328,7 +342,7 @@ b8 Lexer::consume_macro_tuple_argument()
 		advance();
 
 	if (eof())
-		return error_at(curt.line, curt.column, "unexpected eof while consuming macro arguments");
+		return error_at_token(curt, "unexpected eof while consuming macro tuple arguments");
 
 	finish_curt(MacroArgumentTupleArg);
 

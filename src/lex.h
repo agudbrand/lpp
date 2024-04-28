@@ -6,8 +6,10 @@
 #define _lpp_lex_h
 
 #include "common.h"
+
 #include "array.h"
 #include "logger.h"
+#include "source.h"
 
 #include "csetjmp"
 
@@ -31,28 +33,23 @@ struct Token
 		MacroIdentifier,
 		MacroArgumentTupleArg, // (a, b, c, ...)
 		MacroArgumentString,   // "..."
-		MacroArgumentTable,    // {...}
 
-		// i cannot come up with a better name
-		// but this is just any text that is not lpp code
-		// eg. if we are preprocessing a C file, this is C code
-		Subject, 
+		// Any text that lpp is preprocessing. Eg. if we 
+		// are preprocessing a C file, this is C code.
+		Document, 
 	};
 
 	Kind kind;
 
-    s64 source_location;
-    s64 length;
-
-    s64 indentation_location;
-    s64 indentation_length;
-
-	int line;
-	int column;
+    s32 source_location;
+	s32 length;
 
 	static Token invalid() { return {Kind::Invalid}; }
 
     b8 is_valid() { return kind != Kind::Invalid; }
+
+	// retrieve the raw string this token encompasses from the given Source
+	str get_raw(Source* src) { return src->get_str(source_location, length); }
 
 	static str kind_string(Kind kind)
 	{
@@ -61,15 +58,14 @@ struct Token
 		{
 			case Eof: return "Eof"_str;
 
-			case LuaLine: return "LuaLine"_str;
-			case LuaInline: return "LuaInline"_str;
-			case LuaBlock: return "LuaBlock"_str;
-			case MacroSymbol: return "MacroSymbol"_str;
-			case MacroIdentifier: return "MacroIdentifier"_str;
+			case LuaLine:               return "LuaLine"_str;
+			case LuaInline:             return "LuaInline"_str;
+			case LuaBlock:              return "LuaBlock"_str;
+			case MacroSymbol:           return "MacroSymbol"_str;
+			case MacroIdentifier:       return "MacroIdentifier"_str;
 			case MacroArgumentTupleArg: return "MacroArgumentTupleArg"_str;
-			case MacroArgumentString: return "MacroArgumentString"_str;
-			case MacroArgumentTable: return "MacroArgumentTable"_str;
-			case Subject: return "Subject"_str;
+			case MacroArgumentString:   return "MacroArgumentString"_str;
+			case Document:              return "Document"_str;
 			default: return "*TOKEN KIND WITH NO STRING*"_str;
 		}
 	}
@@ -83,33 +79,22 @@ struct Lexer
 {
 	using enum Token::Kind;
 
-	str stream_name;
-
     str cursor;
     utf8::Codepoint cursor_codepoint;
 
-	s64 line;
-	s64 column;
-
-	str indentation;
-	b8  accumulate_indentation;
-
-    io::Memory stream_buffer;
+	Source* source;
     io::IO* in;
 
 	Token::Kind last_token_kind;
 
-	jmp_buf err_handler;
+	b8 in_indentation;
 
-	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+	jmp_buf err_handler; // this is 200 bytes !!!
+
+	b8   init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
     void deinit();
         
 	Token next_token();
-
-    str get_raw(Token& t)
-    {
-        return {stream_buffer.buffer + t.source_location, t.length};
-    }
 
 private:
 
@@ -138,44 +123,26 @@ private:
 	void skip_whitespace();
 
 	template<typename... T>
-	b8 error_at(s64 line, s64 column, T... args)
+	b8 error_at(s32 line, s32 column, T... args)
 	{
-        ERROR(stream_name, ":", line, ":", column, ": ", args..., "\n");
+        ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
 		return false;
+	}
+
+	template<typename... T>
+	b8 error_at_token(Token& t, T... args)
+	{
+		Source::Loc loc = source->get_loc(t.source_location);
+		return error_at(loc.line, loc.column, args...);
 	}
 
 	template<typename... T>
 	b8 error_here(T... args)
 	{
-		ERROR(stream_name, ":", line, ":", column, ": error: ", args..., "\n");
-		return false;
+		Source::Loc loc = source->get_loc(cursor.bytes - source->cache.buffer);
+		return error_at(loc.line, loc.column, args...);
 	}
 
-};
-
-/* ================================================================================================ TokenIterator
- */
-struct TokenIterator
-{
-	Token* curt;
-	Token* stop;
-
-	static TokenIterator from(TokenArray& arr)
-	{
-		return {arr.arr, arr.arr + arr.len()};
-	}
-
-	// returns true if the token moves, false if 
-	// we're at the end
-	b8 next()
-	{
-		if (curt == stop)
-			return false;
-		curt += 1;
-		return true;
-	}
-
-	Token* operator->() { return curt; }
 };
 
 #endif // _lpp_lex_h

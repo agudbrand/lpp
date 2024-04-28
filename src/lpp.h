@@ -3,32 +3,46 @@
  *	lpp state and interface used throughout the 
  *	project.
  *
+ *  TODO(sushi) add a lpp api function for quitting execution entirely via a longjmp 
+ *              or something. When an error occurs in nested metaprograms 
+ *              (like via an import macro or sometinhg) it will currently 
+ *              report that every single file failed, whne we only want to show info
+ *              about the failing file 
  */
 
 #ifndef _lpp_lpp_h
 #define _lpp_lpp_h
 
 #include "common.h"
+#include "source.h"
 #include "parser.h"
 #include "pool.h"
+#include "luastate.h"
 
 struct lua_State;
+
+struct MetaprogramContext;
+
+typedef void* Metaprogram;
 
 struct Lpp
 {
     Logger logger;
 
-	lua_State* L;
+	LuaState lua;
+
+	Pool<MetaprogramContext> contexts;
+	Pool<Source> sources;
 
     b8   init(Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();
 
-	b8 create_metaprogram(str name, io::IO* input_stream, io::IO* output_stream);
-	b8 run_metaprogram(str name, io::IO* input_stream, io::IO* output_stream);
+	Metaprogram create_metaprogram(str name, io::IO* input_stream, io::IO* output_stream);
+	b8 run_metaprogram(Metaprogram ctx, io::IO* input_stream, io::IO* output_stream);
 
 private:
 
-	io::Memory metaenv_chunk;
+	io::Memory metaenv_chunk; // i dont think this is necessary but i dont remember why
 
 	b8 cache_metaenvironment();
 	static int cache_writer(lua_State* L, const void* p, size_t sz, void* ud);

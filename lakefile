@@ -48,8 +48,22 @@ $[
 
 	-Llib
 	-lluajit
-	-lm
 	-Wl,--export-dynamic
+]
+
+llvm_flags :=
+$[
+	
+	-lLLVM-18
+    -lclangFrontend
+    -lclangAST
+    -lclangBasic
+    -lclangDriver
+    -lclangRewriteFrontend
+    -lclangSerialization
+    -lclangStaticAnalyzerFrontend
+    -lclangTooling
+    -lclangToolingSyntax
 
 ]
 
@@ -124,7 +138,11 @@ for c_file, d_file in lake.zip(files.c, files.d) do
             dir := tostring(d_file):match("(.*)/")
             lake.mkdir(dir, {make_parents = true})
 
-			result := ` cpp $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
+			cflags_str := os.getenv("NIX_CFLAGS_COMPILE")
+			cflags := {}
+			for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
+
+			result := ` clang++  $(c_file) $(compiler_flags) $(cflags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
 
 			if result.exit_status ~= 0 then
 				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
@@ -138,13 +156,10 @@ for c_file, d_file in lake.zip(files.c, files.d) do
 				if file:sub(-1) ~= ":" then
 					-- need to manually filter out 'new' because cpp doesn't find that its a 
 					-- system header for whatever reason
-					if file ~= "new" and
-					   file ~= "csetjmp" then
-						if file:starts_with("generated") then
-							out = out.."src/"
-						end
-						out = out..file.."\n"
+					if file:starts_with("generated") then
+						out = out.."src/"
 					end
+					out = out..file.."\n"
 				end
 			end
 
@@ -191,4 +206,5 @@ script_target := function(scriptname, outname)
 		end)
 end
 
-script_target("cliargs.lua", "cliargs.h")
+script_target("cliargs.lua", "cliargs.h") 
+  

@@ -3,31 +3,17 @@
 --     This is the environment that a lua metaprogram will execute in. 
 -- ]]
 
+
 local ffi = require "ffi"
-ffi.cdef [[
-
-	typedef uint8_t  u8;
-	typedef uint16_t u16;
-	typedef uint32_t u32;
-	typedef uint64_t u64;
-	typedef int8_t   s8;
-	typedef int16_t  s16;
-	typedef int32_t  s32;
-	typedef int64_t  s64;
-	typedef float    f32;
-	typedef double   f64;
-	typedef u8       b8; // booean type
-
-	typedef struct str
-	{
-		u8* s;
-		s32 len;
-	} str;
-
-	str get_token_indentation(void* lpp, s32);
-]]
 local C = ffi.C
 
+local strtype = ffi.typeof("str")
+local make_str = function(s)
+	return strtype(s, #s)
+end
+
+local buffer = require "string.buffer"
+local co = require "coroutine"
 
 -- The metaenvironment table.
 -- All things in this table are accessible as 
@@ -35,9 +21,19 @@ local C = ffi.C
 local M = {}
 
 -- Shallow copy the global table into the meta env. 
-for k,v in pairs(_G) do
-    M[k] = v
-end 
+--for k,v in pairs(_G) do
+--    M[k] = v
+--end
+M.__index = _G
+
+setmetatable(M, M)
+
+M.__metaenv =
+{
+	queue = {},
+	phase_one={}
+}
+local menv = M.__metaenv
 
 
 -- [[
@@ -51,20 +47,10 @@ end
 -- TODO(sushi) make this a luajit string buffer 
 local result = ""
 
+-- queue of document strings and macros to invoke after
+-- the first translation phase
+
 local macro_token_index = nil
-
--- [[
---     __LPP functions
--- ]]
-
-
-local function append_result(s)
-	if type(s) ~= "string" then 
-		error("append_result() got "..type(s).." instead of a string!", 3)
-	end
-
-	result = result .. s
-end
 
 
 -- [[
@@ -74,43 +60,62 @@ end
 -- ]]
 
 
-M.__SUBJECT = function(str, token)
-    if str ~= nil then
-        append_result(str)
-    end
+local append_document = function(str)
+	local current = menv.queue[#menv.queue]
+	if not current or
+		   current.type == "macro" then
+		current = {type="document",buf=buffer.new()}
+		table.insert(menv.queue,current)
+	end
+	current.buf:put(str)
 end
 
-M.__VAL = function(x, token)
+menv.doc = function(str)
+	append_document(str)
+end
+
+menv.val = function(x)
 	if x == nil then
 		error("inline lua expression resulted in nil", 2)
 	end
 	local s = tostring(x)
-	if s == nil then
-		error("result of inline lua expression was not convertible to a string", 2)
+	if not s then
+		error("result of inline lua expression is not convertible to a string", 2)
 	end
-	append_result(tostring(x))
+	append_document(s)
 end
 
-M.__SET_MACRO_TOKEN_INDEX = function(idx)
-	macro_token_index = idx
+menv.macro = function(offset, m, ...)
+	if not m then
+		error("macro identifier is nil", 2)
+	end
+	table.insert(menv.queue, {type = "macro", offset = offset, macro = m, args = {...}})
 end
 
-M.__MACRO = function(result, token)
-    if result ~= nil then
-        if type(result) ~= "string" then
-            error("lua macro did not result in a string, got: "..type(result), 2)
-        end
-        return result
-    end
-end
+-- TODO(sushi) make this more graceful later
+local current_sec = nil
 
-M.__FINAL = function()
-	return result
+menv.final = function()
+	for k,v in pairs(M) do
+		print(k, v)
+	end
+
+	local buf = buffer.new()
+	for _,sec in ipairs(menv.queue) do
+		if sec.type == "document" then
+			buf:put(sec.buf)
+		elseif sec.type =="macro" then
+			buf:put(sec.macro(unpack(sec.args)))
+		end
+	end
+	return buf:get()
 end
 
 
 -- [[
 --    User facing lpp api, accessed via the lpp var anywhere in the metaenvironment
+--
+--    TODO(sushi) move this into its own file as it grows
 -- ]]
 
 
@@ -121,6 +126,56 @@ local lpp = M.lpp
 lpp.indentation = function()
 	local i = C.get_token_indentation(lpp.handle, macro_token_index)
 	return ffi.string(i.s, i.len)
+end
+
+lpp.parse_file = function(path)
+	local mpb = C.process_file(lpp.handle, make_str(path))
+
+	if mpb.memhandle == nil then
+		error("",2)
+	end
+
+	local result = buffer.new(mpb.memsize)
+	local buf = result:ref()
+
+	C.get_metaprogram_result(mpb, buf)
+
+	return ffi.string(buf, mpb.memsize)
+end
+
+lpp.source_location = function()
+	local sl = C.get_token_source_location(lpp.handle, macro_token_index)
+	return ffi.string(sl.streamname.s, sl.streamname.len), sl.line, sl.column
+end
+
+-- Document 'cursor', used for iterating the document parts of the 
+-- file from within a macro and possibly consuming pieces of the document.
+local Cursor = {}
+Cursor.__index = Cursor
+
+Cursor.new = function(offset)
+	local o = {}
+	o.offset = offset
+	setmetatable(o, Cursor)
+	return o
+end
+
+Cursor.codepoint = function(self)
+	return C.codepoint_at_offset(lpp.handle, self.offset)
+end
+
+-- Moves the cursor forward by a single character.
+Cursor.next_char = function(self)
+	self.offset = self.offset + C.advance_at_offset(lpp.handle, self.offset)
+end
+
+Cursor.source_location = function(self)
+	local sl = C.get_source_location(self.offset)
+	return ffi.string(sl.streamname.s, sl.streamname.len), sl.line, sl.column
+end
+
+lpp.get_cursor_after_macro = function()
+	
 end
 
 return M, lpp

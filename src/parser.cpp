@@ -5,21 +5,23 @@
 /* ------------------------------------------------------------------------------------------------ Parser::init
  */
 b8 Parser::init(
-		io::IO* input_stream, 
-		str     stream_name, 
-		io::IO* output_stream, 
+		Source* src,
+		io::IO* instream, 
+		io::IO* outstream, 
 		Logger::Verbosity verbosity)
 {
-	assert(input_stream && output_stream);
+	assert(instream && outstream);
 
 	logger.init("lpp.parser"_str, verbosity);
 
-	INFO("initializing on stream '", stream_name, "'\n");
+	TRACE("initializing on stream '", src->name, "'\n");
 
 	tokens = Array<Token>::create();
-	in = input_stream;
+	in = instream;
+	out = outstream;
+	source = src;
 
-	if (!lexer.init(in, stream_name, verbosity))
+	if (!lexer.init(in, src, verbosity))
 		return false;
 
 	return true;
@@ -30,18 +32,15 @@ b8 Parser::init(
 void Parser::deinit()
 {
 	tokens.destroy();
-	in = nullptr;
 	lexer.deinit();
+	*this = {};
 }
 
 /* ------------------------------------------------------------------------------------------------ Parser::run
  */
 b8 Parser::run()
 {
-	INFO("begin\n");
-
-	DEBUG("opening metaprogram buffer\n");
-	metaprogram.open();
+	TRACE("begin\n");
 
 	// wrap call to next token so i dont have to write out this whole thing every single time
 	// this could fail if the lexer encounters unicode that is invalid and stuff
@@ -61,74 +60,75 @@ b8 Parser::run()
 			case Invalid:
 				return false;
 
-			case Subject:
+			case Document:
 				TRACE("placing document text: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
-				write_metaprogram("__SUBJECT(\""_str);
+				write_out("__metaenv.doc(\""_str);
 				// sanitize the document text's control characters into lua's represenatations of them
 				for (u8 c : get_raw())
 				{
 					if (iscntrl(c))
-						write_metaprogram("\\"_str, c);
+						write_out("\\"_str, c);
 					else if (c == '"')
-						write_metaprogram("\\\""_str);
+						write_out("\\\""_str);
 					else if (c == '\\')
-						write_metaprogram("\\\\"_str);
+						write_out("\\\\"_str);
 					else 
-						write_metaprogram((char)c);
+						write_out((char)c);
 				}
 
-				write_metaprogram("\")\n"_str);
+				write_out("\")\n"_str);
 				next_token();
 				break;
 
 			case LuaBlock:
 				TRACE("placing lua block: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
-				write_metaprogram(get_raw(), "\n");
+				write_out(get_raw(), "\n");
 				next_token();
 				break;
 
 			case LuaLine:
 				TRACE("placing lua line: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
-				write_metaprogram(get_raw(), "\n");
+				write_out(get_raw(), "\n");
 				next_token();
 				break;
 
 			case LuaInline:
 				TRACE("placing lua inline: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
-				write_metaprogram("__SUBJECT(__VAL("_str, get_raw(), "))\n"_str);
+				write_out("__metaenv.val("_str, get_raw(), ")\n"_str);
 				next_token();
 				break;
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
-				write_metaprogram(
-						"__SET_MACRO_TOKEN_INDEX("_str, tokens.len(), ")\n",
-						"__SUBJECT(__MACRO("_str);
+				write_out("__metaenv.macro("_str);
 
 				next_token(); // identifier
-				write_metaprogram(get_raw());
+				write_out(get_raw());
 
 				next_token();
 				if (at(MacroArgumentTupleArg))
 				{
-					write_metaprogram('(');
 					for (;;)
 					{
-						write_metaprogram('"', get_raw(), '"');
+						write_out(',', '"', get_raw(), '"');
 						next_token();
 						if (at(Eof) or not at(MacroArgumentTupleArg))
 							break;
-						write_metaprogram(',');
+						write_out(',');
 					}
-					write_metaprogram(')');
+				}
+				else if (at(MacroArgumentString))
+				{
+					write_out(',', '"', get_raw(), '"');
+					next_token();
 				}
 
-				write_metaprogram("))\n"_str);
+				write_out(")\n"_str);
 				break;
 		}
 	}
 
-	write_metaprogram("return __FINAL()\n");
+	write_out("return __metaenv.final()\n");
 
 	return true;
 }
@@ -158,5 +158,5 @@ b8 Parser::at(Token::Kind kind)
  */
 str Parser::get_raw()
 {
-	return lexer.get_raw(curt);
+	return curt.get_raw(source);
 }

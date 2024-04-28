@@ -27,12 +27,16 @@ struct Pool
 
 	struct Slot
 	{
-		b8 used;
+		// NOTE(sushi) element/next_free_slot union MUST be first
+		//             as this avoids the offsetof warning about non-standard-layout 
+		//             or some garbage IDK C++ is weird
+		//             MAYBE ill look into it more later
 		union
 		{
 			T     element;
 			Slot* next_free_slot;
 		};
+		b8 used;
 	};
 
 	struct Chunk
@@ -106,7 +110,7 @@ struct Pool
 	 */ 
 	void remove(T* x)
 	{
-		Slot* slot = (Slot*)((u8*)x - offsetof(Slot, element));
+		Slot* slot = (Slot*)x;
 		slot->used = false;
 		slot->next_free_slot = free_slot;
 		free_slot = slot;
@@ -133,6 +137,48 @@ private:
 		chunk->next = current_chunk;
 		current_chunk = chunk;
 	}
+
+	// VERY inefficient helper for iterating over all elements 
+	// of this pool. This should only be used sparingly, like 
+	// for deinitializing things when you don't already have 
+	// a better list of them to work with.
+	struct Iterator
+	{
+		Chunk* current;
+		s32 slotidx;
+
+		T* operator++()
+		{
+			for (;;)
+			{
+				if (slotidx == N_slots_per_chunk - 1)
+				{
+					current = current->next;
+					if (!current)
+						return nullptr;
+					slotidx = 0;
+				}
+				if (current->slots[slotidx].used)
+					return &current->slots[slotidx].element;
+				slotidx += 1;
+			}
+		}
+
+		b8 operator != (const Iterator& rhs)
+		{
+			return rhs.slotidx == slotidx && current == rhs.current;
+		}
+
+		T& operator*()
+		{
+			return current->slots[slotidx].element;
+		}
+	};
+
+public:
+
+	Iterator begin() { return {current_chunk, 0}; }
+	Iterator end()   { return {nullptr,0}; }
 };
 
 

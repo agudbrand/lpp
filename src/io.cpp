@@ -206,6 +206,7 @@ void Memory::commit(s32 committed_space)
 {
 	assert(len + committed_space <= space);
 	len += committed_space;
+	buffer[len] = 0;
 }
 
 s64 Memory::write(str slice)

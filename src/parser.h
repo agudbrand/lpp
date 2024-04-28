@@ -19,12 +19,14 @@ struct Parser
 
 	Token curt;
 
+	Source* source;
+
 	io::IO* in;
 	io::IO* out;
 
 	jmp_buf err_handler;
 
-	b8   init(io::IO* input_stream, str stream_name, io::IO* out, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+	b8   init(Source* source, io::IO* instream, io::IO* outstream, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();
 
 	b8 run();

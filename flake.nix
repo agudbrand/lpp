@@ -21,15 +21,23 @@
 						luajit
 						(hiPrio clang-tools.override 
 						{
-							llvmPackages = llvmPackages_17;
+							llvmPackages = llvmPackages_18;
 							enableLibcxx = false;
 						})
-						llvmPackages_17.libcxxClang
+						llvmPackages_18.libcxxClang
+						llvmPackages_18.libclang
+						llvmPackages_18.libllvm
+						llvmPackages_18.stdenv
 						gnumake
 						gdb
 						bear
 						linuxKernel.packages.linux_zen.perf
 					];
+
+				env = 
+				{
+					LD_LIBRARY_PATH = "${pkgs.llvmPackages_18.stdenv.cc.cc.lib}/lib";
+				};
 			};
 		});
 }

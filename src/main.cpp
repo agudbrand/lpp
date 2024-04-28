@@ -29,31 +29,40 @@ DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
 int main(int argc, char** argv) 
 {
-	log.init();
-	defer { log.deinit(); };
+	lpp::log.init();
+	defer { lpp::log.deinit(); };
 
 	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Trace);
+	logger.init("lpp"_str, Logger::Verbosity::Warn);
 
 	io::FileDescriptor out;
 	out.open(1);
 	defer { out.close(); };
 
-	log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
+	lpp::log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
 
-	logger.log(Logger::Verbosity::Trace, "hello\nthere\nman!");
-
-	io::FileDescriptor testcpp;
-	if (!testcpp.open("test.lpp"_str, io::Flag::Readable))
+	io::FileDescriptor testlpp;
+	if (!testlpp.open("test.lpp"_str, io::Flag::Readable))
 		return 1;
-	defer { testcpp.close(); };
+	defer { testlpp.close(); };
 
-	Lpp lpp;
-	if (!lpp.init(&testcpp, &out, logger.verbosity))
+	Lpp lpp = {};
+	if (!lpp.init(logger.verbosity))
 		return 1;
 
-	if (!lpp.run())
+	io::Memory mp;
+	mp.open();
+
+	Metaprogram m = lpp.create_metaprogram("test.lpp"_str, &testlpp, &mp);
+	if (!m)
 		return 1;
+
+	out.write({mp.buffer, mp.len});
+
+	if (!lpp.run_metaprogram(m, &mp, &out))
+		return 1;
+
+	lpp.deinit();
 
 	return 0;
 }

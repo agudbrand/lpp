@@ -2,7 +2,9 @@
 
 #include "time.h"
 
+namespace lpp {
 Log log;
+}
 
 /* ------------------------------------------------------------------------------------------------ Log::init
  */
@@ -93,9 +95,9 @@ void Logger::write_prefix(Verbosity v, Log::Dest& d)
     {
         if (d.flags.test(TrackLongestName))
         {
-            if (name.len > ::log.max_name_len)
-                ::log.max_name_len = name.len;
-            for (s32 i = 0; i < ::log.max_name_len - name.len; i++)
+            if (name.len > lpp::log.max_name_len)
+                lpp::log.max_name_len = name.len;
+            for (s32 i = 0; i < lpp::log.max_name_len - name.len; i++)
                 io::format(d.io, " ");
         }
 
@@ -137,6 +139,6 @@ void Logger::write_prefix(Verbosity v, Log::Dest& d)
         io::format(d.io, ": ");
     }
 
-    for (s32 i = 0; i < ::log.indentation; i++)
+    for (s32 i = 0; i < lpp::log.indentation; i++)
         d.io->write(" "_str);
 }

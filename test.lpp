@@ -1,35 +1,29 @@
-
-
 $$$
 
-local loggerid = "lpp"
+DEBUG = true
 
-local verbosity =
+local import = function(s)
+	return lpp.parse_file(s)
+end
+
+local values =
 {
-	trace = 0,
-	debug = 1,
-	info = 2,
-	notice = 3,
-	warn = 4,
-	error = 5,
-	fatal = 6
+	100,
+	200,
+	300,
+	400
 }
 
-local trace = function(...)
-	local out = "if ((u32)"..loggerid..".verbosity <= (u32)Logger::Verbosity::Trace) "..loggerid..".log(Logger::Verbosity::Trace"
-	local args = {...}
-	for i=1,#args do
-		out = out..", \""..args[i].."\""
-	end
-	out = out..")"
-	return out
-end	
-
-
 $$$
+
+@import "apple.lpp"
 
 int main()
 {
-	@trace(hello!)
+	static const int values[] =
+	{
+		$ for i=1,#values do
+			$(values[i]),
+		$ end
+	}
 }
-

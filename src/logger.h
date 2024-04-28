@@ -26,6 +26,8 @@
 
 #define SCOPED_INDENT ScopedIndent __FILE__##__LINE__
 
+#define DEBUGEXPR(expr) DEBUG(STRINGIZE(expr) ": ", expr, '\n')
+
 /* ================================================================================================ Log
  *  Central log object that keeps track of destinations, which are named io targets that have 
  *  some settings to customize their output.
@@ -73,8 +75,9 @@ struct Log
 	void new_destination(str name, io::IO* d, Dest::Flags flags);
 };
 
-extern Log log; 
-
+namespace lpp {
+extern Log log;
+}
 
 /* ================================================================================================ Log
  *  A logger, which is a named thing that logs stuff to the log. Each logger has its own verbosity 
@@ -111,7 +114,7 @@ struct Logger
 	{
 		using enum Verbosity;
 
-		for (Log::Dest& destination : ::log.destinations)
+		for (Log::Dest& destination : lpp::log.destinations)
 		{
 			write_prefix(v, destination);
 			io::formatv(destination.io, args...);
@@ -162,13 +165,13 @@ struct ScopedIndent
 {
 	ScopedIndent()
 	{
-		log.indentation += 1;
+		lpp::log.indentation += 1;
 	}
 
 	~ScopedIndent()
 	{
-		if (log.indentation)
-			log.indentation -= 1;
+		if (lpp::log.indentation)
+			lpp::log.indentation -= 1;
 	}
 };
 
