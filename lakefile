@@ -8,7 +8,16 @@ lpp := lake.target(build_dir.."lpp")
 files := {}
 
 files.c = lake.find("src/*.cpp")
+
+-- TODO(sushi) implement lake's glob manually so we can support recursive globbing eg. **/*.cpp
+--             cause this kinda fucking stinks
 lake.concat(files.c, lake.find("src/json/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/containers/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/io/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/json/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/memory/*.cpp"))
+
 files.o = lake.replace(files.c, "(src/.-)%.cpp", build_dir.."%1.o")
 files.d = lake.replace(files.o, "(.-)%.o", "%1.d")
 
@@ -22,10 +31,11 @@ end
 
 compiler_flags := 
 $[
-
+	
 	-std=c++20
 	-Iinclude
 	-Isrc
+	-Isrc/iro/src
 	-Wno-switch
 	-fcolor-diagnostics
 	-fno-caret-diagnostics
@@ -45,7 +55,7 @@ end
 
 linker_flags := 
 $[
-
+	
 	-Llib
 	-lluajit
 	-Wl,--export-dynamic
@@ -53,7 +63,8 @@ $[
 
 llvm_flags :=
 $[
-	
+
+	-stdlib=libstdc++
 	-lLLVM-18
     -lclangFrontend
     -lclangAST
@@ -87,7 +98,7 @@ linker_recipe := function(input, output)
         lake.mkdir(dir, {make_parents = true})
 
         start := lake.get_highres_clock()
-        result := ` $(linker) $(input) $(linker_flags) -o $(output) `
+        result := ` $(linker) $(input) $(linker_flags) $(llvm_flags) -o $(output) `
         time_took := (lake.get_highres_clock() - start) / 1000000
 
         if result.exit_status == 0 then
@@ -98,7 +109,6 @@ linker_recipe := function(input, output)
 			io.write(result.stdout)
 			error(red.."linker failed"..reset)
         end
-
     end
 end
 

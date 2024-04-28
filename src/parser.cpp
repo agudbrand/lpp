@@ -61,7 +61,7 @@ b8 Parser::run()
 				return false;
 
 			case Document:
-				TRACE("placing document text: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
+				TRACE("placing document text: '", io::SanitizeControlCharacters(get_raw()), "'\n");
 				write_out("__metaenv.doc(\""_str);
 				// sanitize the document text's control characters into lua's represenatations of them
 				for (u8 c : get_raw())
@@ -81,19 +81,19 @@ b8 Parser::run()
 				break;
 
 			case LuaBlock:
-				TRACE("placing lua block: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
+				TRACE("placing lua block: '", io::SanitizeControlCharacters(get_raw()), "'\n");
 				write_out(get_raw(), "\n");
 				next_token();
 				break;
 
 			case LuaLine:
-				TRACE("placing lua line: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
+				TRACE("placing lua line: '", io::SanitizeControlCharacters(get_raw()), "'\n");
 				write_out(get_raw(), "\n");
 				next_token();
 				break;
 
 			case LuaInline:
-				TRACE("placing lua inline: '", io::fmt::SanitizeControlCharacters(get_raw()), "'\n");
+				TRACE("placing lua inline: '", io::SanitizeControlCharacters(get_raw()), "'\n");
 				write_out("__metaenv.val("_str, get_raw(), ")\n"_str);
 				next_token();
 				break;

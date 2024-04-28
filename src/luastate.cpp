@@ -49,7 +49,7 @@ str LuaState::tostring(s32 idx)
 {
 	size_t len;
 	const char* s = lua_tolstring(L, idx, &len);
-	return {(u8*)s, (s64)len};
+	return {(u8*)s, len};
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::newtable
@@ -257,7 +257,7 @@ b8 LuaState::dump(io::IO* dest)
 	{
 		io::IO* dest = (io::IO*)ud;
 
-		if (!dest->write({(u8*)p, (s64)sz}))
+		if (!dest->write({(u8*)p, sz}))
 			return 1;
 		return 0;
 	};

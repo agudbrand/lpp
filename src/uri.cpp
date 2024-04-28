@@ -9,24 +9,25 @@ Logger logger = Logger::create("uri"_str, Logger::Verbosity::Warn);
 
 b8 URI::init()
 {
-	scheme    = dstr::create();
-	authority = dstr::create();
-	body      = dstr::create();
+    if (!(scheme.open() &&
+          authority.open() &&
+          body.open()))
+        return false;
 	return true;
 }
 
 void URI::deinit()
 {
-	scheme.destroy();
-	authority.destroy();
-	body.destroy();
+	scheme.close();
+	authority.close();
+	body.close();
 }
 
 void URI::reset()
 {
-	scheme.reset();
-	authority.reset();
-	body.reset();
+	scheme.clear();
+	authority.clear();
+	body.clear();
 }
 
 b8 URI::parse(URI* uri, str s_)
@@ -42,7 +43,7 @@ b8 URI::parse(URI* uri, str s_)
 		return false;
 	}
 
-	uri->scheme.append(str{s.bytes, p});
+	uri->scheme.write({s.bytes, p});
 
 	s.bytes = s.bytes + p.x + 1;
 
@@ -51,7 +52,7 @@ b8 URI::parse(URI* uri, str s_)
 		s.bytes += 2;
 		if ((p = s.find_first('/')))
 		{
-			uri->authority.append(str{s.bytes, p});
+			uri->authority.write(str{s.bytes, p});
 			s.bytes = s.bytes + p.x + 1;
 		}
 		else
@@ -61,7 +62,7 @@ b8 URI::parse(URI* uri, str s_)
 		}
 	}
 
-	uri->body.append(s);
+	uri->body.write(s);
 	return true;
 }
 

@@ -1,22 +1,25 @@
 /*
  *  URI parsing and generating api
+ *
+ *  TODO(sushi) move into iro
  */
 
 #ifndef _lpp_uri_h
 #define _lpp_uri_h
 
 #include "common.h"
-#include "unicode.h"
-#include "logger.h"
+#include "io/io.h"
+
+using namespace iro;
 
 /* ================================================================================================ URI
  *  A URI and its parts. This always copies whatever is given to it and owns the memory it views.
  */
 struct URI
 {
-	dstr scheme;
-	dstr authority;
-	dstr body;
+    io::Memory scheme;
+    io::Memory authority;
+    io::Memory body;
 
 	b8   init();
 	void deinit();
@@ -31,4 +34,4 @@ struct URI
 	b8 decode();
 };
 
-#endif // _lpp_uri_types_h
+#endif // _lpp_uri_h

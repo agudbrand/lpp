@@ -7,7 +7,7 @@
 
 #include "common.h"
 
-#include "array.h"
+#include "containers/array.h"
 #include "logger.h"
 #include "source.h"
 

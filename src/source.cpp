@@ -7,7 +7,7 @@ b8 Source::init(str name)
 {
 	if (!cache.open())
 		return false;
-	line_offsets = Array<s32>::create();
+	line_offsets = Array<u64>::create();
 	return true;
 }
 
@@ -22,23 +22,23 @@ void Source::deinit()
 
 /* ------------------------------------------------------------------------------------------------ Source::get_str
  */
-str Source::get_str(s32 loc, s32 len)
+str Source::get_str(u64 loc, u64 len)
 {
 	return {cache.buffer + loc, len};
 }
 
 /* ------------------------------------------------------------------------------------------------ Source::get_loc
  */
-Source::Loc Source::get_loc(s32 loc)
+Source::Loc Source::get_loc(u64 loc)
 {
-	s32 l = 0, 
+	u64 l = 0, 
 		m = 0, 
 		r = line_offsets.len();
 
 	while (l <= r)
 	{
 		m = l + (r - l) / 2;
-		s32 cur = line_offsets[m];
+		u64 cur = line_offsets[m];
 		if (cur < loc)
 			l = m+1;
 		else if (cur > loc)
@@ -47,8 +47,8 @@ Source::Loc Source::get_loc(s32 loc)
 			break;
 	}
 
-	s32 column = 0;
-	s32 offset = line_offsets[m];
+	u64 column = 0;
+	u64 offset = line_offsets[m];
 	for (;;)
 	{
 		utf8::Codepoint c = utf8::decode_character(cache.buffer + offset, 4);

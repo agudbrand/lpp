@@ -2,14 +2,10 @@
 
 #include "lpp.h"
 
-#include "stdio.h"
 #include "stdlib.h"
 #include "stdarg.h"
 
-#include "io.h"
-#include "json/types.h"
-#include "json/parser.h"
-#include "uri.h"
+#include "io/io.h"
 
 #include "logger.h"
 
@@ -23,14 +19,12 @@
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
-#include "unistd.h"
-
 #include "generated/cliargs.h"
 
 int main(int argc, char** argv) 
 {
-	lpp::log.init();
-	defer { lpp::log.deinit(); };
+	iro::log.init();
+	defer { iro::log.deinit(); };
 
 	Logger logger;
 	logger.init("lpp"_str, Logger::Verbosity::Warn);
@@ -39,7 +33,7 @@ int main(int argc, char** argv)
 	out.open(1);
 	defer { out.close(); };
 
-	lpp::log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
+	iro::log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
 
 	io::FileDescriptor testlpp;
 	if (!testlpp.open("test.lpp"_str, io::Flag::Readable))

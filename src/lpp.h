@@ -16,8 +16,10 @@
 #include "common.h"
 #include "source.h"
 #include "parser.h"
-#include "pool.h"
+#include "containers/pool.h"
 #include "luastate.h"
+
+using namespace iro;
 
 struct lua_State;
 

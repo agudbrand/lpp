@@ -10,9 +10,10 @@
 
 #include "common.h"
 #include "unicode.h"
-#include "array.h"
-#include "io.h"
+#include "containers/array.h"
+#include "io/io.h"
 
+using namespace iro;
 
 /* ================================================================================================ Source
  */
@@ -28,12 +29,12 @@ struct Source
 	io::Memory cache;
 
 	// Byte offsets into this source.
-	Array<s32> line_offsets;
+	Array<u64> line_offsets;
 
 	struct Loc
 	{	
-		s32 line;
-		s32 column;
+		u64 line;
+		u64 column;
 	};
 
 
@@ -44,8 +45,8 @@ struct Source
 	b8   init(str name);
 	void deinit();
 
-	str get_str(s32 offset, s32 length);
-	Loc get_loc(s32 offset);
+	str get_str(u64 offset, u64 length);
+	Loc get_loc(u64 offset);
 };
 
 #endif // _lpp_source_h

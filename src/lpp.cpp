@@ -199,7 +199,7 @@ int Lpp::cache_writer(lua_State* L, const void* p, size_t sz, void* ud)
 {
 	Lpp* lpp = (Lpp*)ud;
 
-	if (!lpp->metaenv_chunk.write({(u8*)p, (s64)sz}))
+	if (!lpp->metaenv_chunk.write({(u8*)p, sz}))
 		return 1;
 
 	return 0;
@@ -271,8 +271,8 @@ str get_token_indentation(MetaprogramContext* ctx, s32 idx)
 struct SourceLocation
 {
 	str streamname;
-	s32 line;
-	s32 column;
+	u64 line;
+	u64 column;
 };
 
 SourceLocation get_token_source_location(MetaprogramContext* ctx, s32 idx)
@@ -292,7 +292,7 @@ SourceLocation get_source_location(MetaprogramContext* ctx, s32 offset)
 struct MetaprogramBuffer
 {
 	io::Memory* memhandle;
-	s64         memsize;
+	u64         memsize;
 };
 
 /* ------------------------------------------------------------------------------------------------ create_metaprogram

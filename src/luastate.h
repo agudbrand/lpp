@@ -10,6 +10,8 @@
 #include "common.h"
 #include "logger.h"
 
+using namespace iro;
+
 struct lua_State;
 
 /* ================================================================================================ LuaState
