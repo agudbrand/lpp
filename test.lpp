@@ -1,29 +1,32 @@
 $$$
+import = function(path)
+	return lpp.process_file(path)
+end
+
+scan = function()
+	local cursor = lpp.get_cursor_after_macro()
+	while cursor:next_char() do
+		 local c = cursor:codepoint()
+		 io.write(string.char(c))
+	end
+end
 
 DEBUG = true
 
-local import = function(s)
-	return lpp.parse_file(s)
-end
-
-local values =
-{
-	100,
-	200,
-	300,
-	400
-}
-
 $$$
+
+@scan
 
 @import "apple.lpp"
 
 int main()
 {
+$ if DEBUG then
 	static const int values[] =
 	{
-		$ for i=1,#values do
-			$(values[i]),
-		$ end
+	$ for i=1,5 do
+		$(math.sin(3*i)),
+	$ end
 	}
+$ end
 }

@@ -17,7 +17,7 @@ struct Parser
 
 	Lexer lexer;
 
-	Token curt;
+	Token* curt;
 
 	Source* source;
 

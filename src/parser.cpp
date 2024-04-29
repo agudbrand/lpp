@@ -24,6 +24,18 @@ b8 Parser::init(
 	if (!lexer.init(in, src, verbosity))
 		return false;
 
+	if (setjmp(lexer.err_handler))
+	{
+		lexer.deinit();
+		return false;
+	}
+
+	if (!lexer.run())
+		return false;
+
+	curt = lexer.tokens.arr-1;
+
+	src->cache_line_offsets();
 	return true;
 }
 
@@ -31,7 +43,6 @@ b8 Parser::init(
  */
 void Parser::deinit()
 {
-	tokens.destroy();
 	lexer.deinit();
 	*this = {};
 }
@@ -42,10 +53,6 @@ b8 Parser::run()
 {
 	TRACE("begin\n");
 
-	// wrap call to next token so i dont have to write out this whole thing every single time
-	// this could fail if the lexer encounters unicode that is invalid and stuff
-	// should probably handle this better later on? not sure if it will ever happen anyhow
-
 	next_token();
 
 	for (;;)
@@ -55,14 +62,14 @@ b8 Parser::run()
 		if (at(Eof))
 			break;
 
-		switch (curt.kind)
+		switch (curt->kind)
 		{
 			case Invalid:
 				return false;
 
 			case Document:
 				TRACE("placing document text: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out("__metaenv.doc(\""_str);
+				write_out("__metaenv.doc("_str, curt->source_location, ",\""_str);
 				// sanitize the document text's control characters into lua's represenatations of them
 				for (u8 c : get_raw())
 				{
@@ -94,13 +101,13 @@ b8 Parser::run()
 
 			case LuaInline:
 				TRACE("placing lua inline: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out("__metaenv.val("_str, get_raw(), ")\n"_str);
+				write_out("__metaenv.val("_str, curt->source_location, ",", get_raw(), ")\n"_str);
 				next_token();
 				break;
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
-				write_out("__metaenv.macro("_str);
+				write_out("__metaenv.macro("_str, curt->source_location, ',');
 
 				next_token(); // identifier
 				write_out(get_raw());
@@ -112,7 +119,7 @@ b8 Parser::run()
 					{
 						write_out(',', '"', get_raw(), '"');
 						next_token();
-						if (at(Eof) or not at(MacroArgumentTupleArg))
+						if (not at(MacroArgumentTupleArg))
 							break;
 						write_out(',');
 					}
@@ -128,7 +135,7 @@ b8 Parser::run()
 		}
 	}
 
-	write_out("return __metaenv.final()\n");
+	// write_out("return __metaenv.final()\n");
 
 	return true;
 }
@@ -137,13 +144,7 @@ b8 Parser::run()
  */
 b8 Parser::next_token()
 {
-	if (setjmp(lexer.err_handler))
-		longjmp(err_handler, 0);
-
-	curt = lexer.next_token();
-	if (!curt.is_valid())
-		return false;
-	tokens.push(curt);
+	curt += 1;
 	return true;
 }
 
@@ -151,12 +152,12 @@ b8 Parser::next_token()
  */
 b8 Parser::at(Token::Kind kind)
 {
-	return curt.kind == kind;
+	return curt->kind == kind;
 }
 
 /* ------------------------------------------------------------------------------------------------ Parser::get_raw
  */
 str Parser::get_raw()
 {
-	return curt.get_raw(source);
+	return curt->get_raw(source);
 }

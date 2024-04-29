@@ -53,7 +53,6 @@ void Lexer::advance(s32 n)
 		if (at('\n'))
 		{
 			in_indentation = true;
-			source->line_offsets.push(cursor.bytes - source->cache.buffer + 1);
 		}
 		else if (in_indentation)
 		{
@@ -81,6 +80,7 @@ b8 Lexer::init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity)
     TRACE("initializing with input stream '", src->name, "'\n");
 	SCOPED_INDENT;
 
+	tokens = TokenArray::create();
     in = input_stream;
 	source = src;
 
@@ -93,106 +93,205 @@ b8 Lexer::init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity)
  */
 void Lexer::deinit()
 {
+	tokens.destroy();
 	*this = {};
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::next_token
  */
-Token Lexer::next_token()
+b8 Lexer::run()
 {
 	using enum Token::Kind;
 
-	TRACE("next_token\n");
-	SCOPED_INDENT;
+	TRACE("run\n");
 
-    if (eof())
-        return {Eof};
-
-    skip_whitespace();
-
-	// Having to deal with state like this is kinda scuffed, but I want to avoid making 
-	// tokens for anything except lpp syntax. This is entirely due to the lexer being 
-	// incremental and also giving individual tokens for the macro symbol, identifier, 
-	// and arguments. If the entire macro were to be a single token it wouldn;t have to be
-	// like this, but i prefer keeping the lexing here and not having to lex a string in the
-	// parser.
-	switch (last_token_kind)
+	for (;;)
 	{
-		case MacroSymbol:
-			if (!consume_macro_identifier())
-				return Token::invalid();
-			return curt;
+		init_curt();
+		skip_whitespace();
 
-		case MacroIdentifier:
-			skip_whitespace();
-			switch (current())
+		while (not at('@') and
+			   not at('$') and
+			   not eof())
+			advance();
+
+		finish_curt(Document);
+
+		if (eof())
+		{
+			init_curt();
+			advance();
+			finish_curt(Eof);
+			return true;
+		}
+
+		if (at('$'))
+		{
+			advance();
+			if (at('$'))
 			{
-				case '(':
-					advance();
-					skip_whitespace();
-
-					// if we find an empty tuple just move on w/o making a token
-					if (at(')'))
-					{
-						advance();
-						if (!consume_document_text())
-							return Token::invalid();
-					}
-					else if (!consume_macro_tuple_argument())
-						return Token::invalid();
-					break;
-
-				default:
-					if (!consume_document_text())
-						return Token::invalid();
-					break;
-
-				case '"':
+				advance();
+				if (at('$'))
+				{
 					advance();
 					init_curt();
+
 					for (;;)
 					{
-						advance();
-						if (eof())
+						if ((advance(), at('$')) and
+							(advance(), at('$')) and
+							(advance(), at('$')))
 						{
-							error_at_token(curt, "unexpected end of file while consuming macro string argument");
-							return Token::invalid();
+							advance();
+							finish_curt(LuaBlock, -3);
+							break;
 						}
 
-						if (at('"'))
-							break;
+						if (eof())
+							return error_at_token(curt, "unexpected eof while consuming lua block");
 					}
-					finish_curt(MacroArgumentString);
-					advance();
-					break;
+				}
+				else
+				{
+					// dont handle this case for now 
+					return error_here("two '$' in a row is currently unrecognized");
+				}
 			}
-			break;
-
-		case MacroArgumentTupleArg:
-			if (!consume_macro_tuple_argument())
-				return Token::invalid();
-			break;
-	
-		default:
-			if (at('@')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - @
+			else if (at('('))
 			{
-				finish_curt(MacroSymbol);
 				advance();
-			}
-			else if (at('$')) // - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - $
-			{
-				if (!consume_lua_code())
-					return Token::invalid();
+				init_curt();
+
+				s64 nesting = 1;
+				for (;;)
+				{
+					advance();
+					if (eof()) 
+						return error_at_token(curt, "unexpected eof while consuming inline lua expression");
+					
+					if (at('(')) 
+						nesting += 1;
+					else if (at(')'))
+					{
+						if (nesting == 1)
+							break;
+						else 
+							nesting -= 1;
+					}
+				}
+
+				finish_curt(LuaInline);
+				advance();
 			}
 			else
 			{
-				if (!consume_document_text())
-					return Token::invalid();
+				init_curt();
+				while (not at('\n') and not eof())
+					advance();
+
+				finish_curt(LuaLine);
+
+				if (not eof())
+					advance();
+
+				// remove whitespace before lua lines to preserve formatting 
+				// NOTE(sushi) this is a large reason why the lexer is not token-stream based anymore!
+				if (tokens.len() != 0)
+				{
+					Token* last = tokens.arr + tokens.len() - 2;
+					str raw = source->get_str(last->source_location, last->length);
+					while (isspace(raw.bytes[last->length-1]) && raw.bytes[last->length-1] != '\n')
+						last->length -= 1;
+				}
 			}
-			break;
+		}
+		else if (at('@'))
+		{
+			init_curt();
+			advance();
+			finish_curt(MacroSymbol);
+
+			skip_whitespace();
+			init_curt();
+
+			if (not at_first_identifier_char())
+				return error_here("expected an identifier of a macro after '@'");
+			
+			// NOTE(sushi) allow '.' so that we can index tables through macros, eg.
+			//             $ local lib = {}
+			//             $ lib.func = function() print("hi!") end
+			//
+			//             @lib.func()
+			while (at_identifier_char() or at('.'))
+				advance();
+			
+			finish_curt(MacroIdentifier);
+			skip_whitespace();
+
+			switch (current())
+			{
+			case '(':
+				advance();
+				skip_whitespace();
+
+				if (at(')'))
+				{
+					// dont create a token for empty macro args
+					advance();
+					init_curt();
+					break;
+				}
+
+				for (;;)
+				{
+					init_curt();
+
+					while (not at(',') and 
+						   not at(')') and 
+						   not eof())
+						advance();
+
+					if (eof())
+						return error_at_token(curt, "unexpected end of file while consuming macro arguments");
+
+					finish_curt(MacroArgumentTupleArg);
+
+					if (at(')'))
+						break;
+
+					advance();
+					skip_whitespace();
+				}
+
+				advance();
+				init_curt();
+				break;
+
+			case '"':
+				advance();
+				init_curt();
+
+				for (;;)
+				{
+					advance();
+					if (eof())
+						return error_at_token(curt, "unexpected end of file while consuming macro string argument");
+
+					if (at('"'))
+						break;
+				}
+				finish_curt(MacroArgumentString);
+				advance();
+				break;
+			}
+		}
+		else
+		{
+			
+		}
 	}
 
-	return curt;
+	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::reset_token
@@ -208,16 +307,19 @@ void Lexer::init_curt()
 void Lexer::finish_curt(Token::Kind kind, s32 len_offset)
 {
 	s32 len = (currentptr() - source->cache.buffer) - curt.source_location;
-	curt.kind = kind;
-	curt.length = len + len_offset;
-	last_token_kind = kind;
+	if (len != 0)
+	{
+		curt.kind = kind;
+		curt.length = len + len_offset;
+		tokens.push(curt);
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::consume_document_text
  */
 b8 Lexer::consume_document_text()
 {
-	init_curt();
+	// init_curt();
 
 	while (not at('@') and
 		   not at('$') and 

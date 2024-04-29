@@ -193,6 +193,15 @@ b8 LuaState::pcall(s32 nargs, s32 nresults, s32 errfunc)
 	return true;
 }
 
+/* ------------------------------------------------------------------------------------------------ LuaState::callmeta
+ */
+b8 LuaState::callmeta(const char* name, s32 idx)
+{
+	if (!luaL_callmeta(L, idx, name))
+		return false;
+	return true;
+}
+
 /* ------------------------------------------------------------------------------------------------ LuaState::getfenv
  */
 void LuaState::getfenv(s32 idx)

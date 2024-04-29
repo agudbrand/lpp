@@ -2,6 +2,8 @@
 #include "logger.h"
 #include "assert.h"
 
+#include "metaenvironment.h"
+
 extern "C"
 {
 #include "lua.h"
@@ -9,12 +11,7 @@ extern "C"
 
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
-struct MetaprogramContext
-{
-	Source* source;
-	Parser parser;
-	Lpp*   lpp;
-};
+
 
 /* ------------------------------------------------------------------------------------------------ Lpp::init
  */
@@ -31,9 +28,10 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	lua.newtable();
 	lua.setglobal(lpp_metaenv_stack);
 
-	DEBUG("creating metaprogram context pool\n");
+	DEBUG("creating pools\n");
 	contexts = Pool<MetaprogramContext>::create();
 	sources = Pool<Source>::create();
+	metaenvs = Pool<Metaenvironment>::create();
 
 	DEBUG("loading luajit ffi\n");
 	if (!lua.dofile("src/cdefs.lua"))
@@ -57,6 +55,10 @@ void Lpp::deinit()
 	for (auto& source : sources)
 		source.deinit();
 	sources.destroy();
+	for (auto& metaenv : metaenvs)
+		metaenv.deinit();
+	metaenvs.destroy();
+
 	metaenv_chunk.close();
 	*this = {};
 }
@@ -76,39 +78,25 @@ Metaprogram Lpp::create_metaprogram(
 	Parser parser;
 	if (!parser.init(source, instream, outstream, logger.verbosity))
 		return nullptr;
+	defer { parser.deinit(); };
 
 	if (setjmp(parser.err_handler))
-	{
-		parser.deinit();
 		return nullptr;
-	}
 
 	if (!parser.run())
 		return nullptr;
 
+	Source* dest = sources.add();
+	dest->init("dest"_str);
+
+	Metaenvironment* metaenv = metaenvs.add();
+	metaenv->init(this, source, dest);
+
 	MetaprogramContext* ctx = contexts.add();
-	ctx->source = source;
-	ctx->parser = parser;
 	ctx->lpp = this;
+	ctx->metaenv = metaenv;
 
 	return ctx;
-}
-
-/* ------------------------------------------------------------------------------------------------ metaprogram_reader
- */
-struct ReaderData
-{
-	u8* buffer;
-	io::IO* io;
-};
-
-static const s64 reader_buffer_size = 256;
-
-const char* metaprogram_reader(lua_State* L, void* data, size_t* size)
-{
-	ReaderData* in = (ReaderData*)data;
-	*size = in->io->read({in->buffer, reader_buffer_size});
-	return (const char*)in->buffer;
 }
 
 /* ------------------------------------------------------------------------------------------------ Lpp::run_metaprogram
@@ -122,12 +110,9 @@ b8 Lpp::run_metaprogram(
 
 	MetaprogramContext* ctx = (MetaprogramContext*)metaprogram;
 
-	INFO("running metaprogram '", ctx->source->name, "'\n");
+	INFO("running metaprogram '", ctx->metaenv->input->name, "'\n");
 
-	u8 reader_buffer[reader_buffer_size];
-	ReaderData data = {reader_buffer, input_stream};
-
-	if (!lua.load(input_stream, (const char*)ctx->source->name.bytes))
+	if (!lua.load(input_stream, (const char*)ctx->metaenv->input->name.bytes))
 	{
 		ERROR("failed to load metaprogram\n");
 		return false;
@@ -144,7 +129,7 @@ b8 Lpp::run_metaprogram(
 
 	// the lpp table is at the top of the stack and we need to give it 
 	// a handle to this context
-	lua.pushstring("handle"_str);
+	lua.pushstring("context"_str);
 	lua.pushlightuserdata(ctx);
 	lua.settable(-3);
 	lua.pop();
@@ -174,20 +159,24 @@ b8 Lpp::run_metaprogram(
 		return false;
 	}
 
-	if (!lua.pcall(0, 1))
+	if (!lua.pcall())
 	{
 		ERROR("failed to run metaprogram\n");
 		return false;
 	}
 
-	// TODO(sushi) we already have the result on the lua stack here
-	//             so the whole dump thing im doing in parse_file 
-	//             PROBABLY isn't necessary, but I have not seen a thing about leaving 
-	//             things on the lua stack after a luajit ffi call so I have no 
-	//             idea if its safe to just leave it there. If it is, we really should
-	//             make this function take in an option to not pop this value.
+	lua.getglobal(lpp_metaenv_stack);
+	lua.pushinteger(lua.objlen());
+	lua.gettable(-2);
+	lua.pushstring("__metaenv"_str);
+	lua.gettable(-2);
 
-	output_stream->write(lua.tostring());
+	if (!ctx->metaenv->process_sections())
+		return false;
+
+	lua.pop(2);
+
+	output_stream->write(ctx->metaenv->output->cache.as_str());
 	lua.pop();
 
 	return true;
@@ -262,33 +251,6 @@ b8 Lpp::load_metaenvironment()
 extern "C"
 {
 
-str get_token_indentation(MetaprogramContext* ctx, s32 idx)
-{
-	Token t = ctx->parser.tokens[idx]; // so scuffed
-	return {};
-}
-
-struct SourceLocation
-{
-	str streamname;
-	u64 line;
-	u64 column;
-};
-
-SourceLocation get_token_source_location(MetaprogramContext* ctx, s32 idx)
-{
-	Token t = ctx->parser.tokens[idx];
-	Source::Loc loc = ctx->source->get_loc(t.source_location);
-	return {ctx->source->name, loc.line, loc.column};
-}
-
-
-SourceLocation get_source_location(MetaprogramContext* ctx, s32 offset)
-{
-	Source::Loc loc = ctx->source->get_loc(offset);
-	return {ctx->source->name, loc.line, loc.column};
-}
-
 struct MetaprogramBuffer
 {
 	io::Memory* memhandle;
@@ -358,22 +320,6 @@ void get_metaprogram_result(MetaprogramBuffer mpbuf, void* outbuf)
 	}
 
 	mpbuf.memhandle->close();
-}
-
-/* ------------------------------------------------------------------------------------------------ advance_at_offset
- */
-s32 advance_at_offset(MetaprogramContext* ctx, s32 offset)
-{
-	// !OVERRUN
-	return utf8::decode_character(ctx->source->cache.buffer + offset, 4).advance;
-}
-
-/* ------------------------------------------------------------------------------------------------ codepoint_at_offset
- */
-u32 codepoint_at_offset(MetaprogramContext* ctx, s32 offset)
-{
-	// !OVERRUN
-	return utf8::decode_character(ctx->source->cache.buffer + offset, 4).codepoint;
 }
 
 }

@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 	defer { iro::log.deinit(); };
 
 	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Warn);
+	logger.init("lpp"_str, Logger::Verbosity::Trace);
 
 	io::FileDescriptor out;
 	out.open(1);
@@ -53,9 +53,14 @@ int main(int argc, char** argv)
 
 	out.write({mp.buffer, mp.len});
 
+	io::FileDescriptor outfile;
+	if (!outfile.open("temp/out"_str, io::Flag::Writable, io::FileDescriptor::Flag::Create))
+		return 1;
+
 	if (!lpp.run_metaprogram(m, &mp, &out))
 		return 1;
 
+	outfile.close();
 	lpp.deinit();
 
 	return 0;

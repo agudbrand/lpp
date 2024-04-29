@@ -71,13 +71,21 @@ struct Token
 	}
 };
 
-typedef Array<Token> TokenArray;
 
 /* ================================================================================================ Lexer
+ *
+ *  TODO(sushi) try reworking the lexer to give a token
+ *	            stream again instead of caching them into an array
+ * 	            to save on memory. Making it a stream complicates the 
+ *	            internal logic too much at the moment so I'm just 
+ *	            going to avoid it for now.
+ *	            It's not a huge issue, though, because Tokens are quite small, and with how lpp 
+ *	            works we shouldn't be making too many tokens to begin with.
  */
 struct Lexer
 {
 	using enum Token::Kind;
+	typedef Array<Token> TokenArray;
 
     str cursor;
     utf8::Codepoint cursor_codepoint;
@@ -85,7 +93,7 @@ struct Lexer
 	Source* source;
     io::IO* in;
 
-	Token::Kind last_token_kind;
+	TokenArray tokens;
 
 	b8 in_indentation;
 
@@ -94,7 +102,7 @@ struct Lexer
 	b8   init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
     void deinit();
         
-	Token next_token();
+	b8 run();
 
 private:
 

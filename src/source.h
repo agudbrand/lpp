@@ -28,9 +28,12 @@ struct Source
 	//             content on demand so we dont store so much memory?
 	io::Memory cache;
 
-	// Byte offsets into this source.
+	// Byte offsets into this source where we find newlines.
+	b8 line_offsets_calculated;
 	Array<u64> line_offsets;
 
+    /* ============================================================================================ Source::Loc
+     */
 	struct Loc
 	{	
 		u64 line;
@@ -45,8 +48,37 @@ struct Source
 	b8   init(str name);
 	void deinit();
 
+	// writes to the cache and handles some state such as if 
+	// line offsets are calculated
+	b8 write_cache(Bytes slice);
+
+	// caches line offsets in the cached buffer
+	b8 cache_line_offsets();
+
 	str get_str(u64 offset, u64 length);
+
+	// translate a byte offset into this source to 
+	// a line and column
 	Loc get_loc(u64 offset);
 };
+
+/* ------------------------------------------------------------------------------------------------ C api
+ *  C api intended for use internally by the lpp lua api.
+ */
+extern "C"
+{
+
+struct MetaprogramContext;
+
+Source* source_create(MetaprogramContext* ctx, str name);
+void    source_destroy(MetaprogramContext* ctx, Source* source);
+str source_get_name(Source* handle);
+u64 source_get_cache_len(Source* handle);
+b8  source_write_cache(Source* handle, Bytes slice);
+b8  source_cache_line_offsets(Source* handle);
+str source_get_str(Source* handle, u64 offset, u64 length);
+Source::Loc source_get_loc(Source* handle, u64 offset);
+
+}
 
 #endif // _lpp_source_h

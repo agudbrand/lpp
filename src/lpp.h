@@ -21,9 +21,13 @@
 
 using namespace iro;
 
-struct lua_State;
+struct Metaenvironment;
 
-struct MetaprogramContext;
+struct MetaprogramContext
+{
+	Lpp* lpp;
+	Metaenvironment* metaenv;
+};
 
 typedef void* Metaprogram;
 
@@ -35,6 +39,7 @@ struct Lpp
 
 	Pool<MetaprogramContext> contexts;
 	Pool<Source> sources;
+	Pool<Metaenvironment> metaenvs;
 
     b8   init(Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();

@@ -58,6 +58,7 @@ struct LuaState
 	b8 dofile(const char* s);
 
 	b8 pcall(s32 nargs = 0, s32 nresults = 0, s32 errfunc = 0);
+	b8 callmeta(const char* name, s32 idx = -1);
 
 	// pushes onto the stack the environment table of the value 
 	// at the given index

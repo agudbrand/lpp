@@ -61,23 +61,6 @@ $[
 	-Wl,--export-dynamic
 ]
 
-llvm_flags :=
-$[
-
-	-stdlib=libstdc++
-	-lLLVM-18
-    -lclangFrontend
-    -lclangAST
-    -lclangBasic
-    -lclangDriver
-    -lclangRewriteFrontend
-    -lclangSerialization
-    -lclangStaticAnalyzerFrontend
-    -lclangTooling
-    -lclangToolingSyntax
-
-]
-
 reset := "\027[0m"
 green := "\027[0;32m"
 blue  := "\027[0;34m"
@@ -98,7 +81,7 @@ linker_recipe := function(input, output)
         lake.mkdir(dir, {make_parents = true})
 
         start := lake.get_highres_clock()
-        result := ` $(linker) $(input) $(linker_flags) $(llvm_flags) -o $(output) `
+        result := ` $(linker) $(input) $(linker_flags) -o $(output) `
         time_took := (lake.get_highres_clock() - start) / 1000000
 
         if result.exit_status == 0 then
@@ -148,11 +131,11 @@ for c_file, d_file in lake.zip(files.c, files.d) do
             dir := tostring(d_file):match("(.*)/")
             lake.mkdir(dir, {make_parents = true})
 
-			cflags_str := os.getenv("NIX_CFLAGS_COMPILE")
-			cflags := {}
-			for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
+			-- cflags_str := os.getenv("NIX_CFLAGS_COMPILE")
+			-- cflags := {}
+			-- for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
 
-			result := ` clang++  $(c_file) $(compiler_flags) $(cflags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
+			result := ` clang++ -v $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
 
 			if result.exit_status ~= 0 then
 				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
