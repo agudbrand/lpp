@@ -69,5 +69,9 @@ ffi.cdef
 	u32 metaenvironment_cursor_current_codepoint(void* ctx, void* cursor);
 
 	SourceLoc metaenvironment_cursor_source_loc(void* ctx, void* cursor);
+
+	b8 metaenvironment_cursor_insert_string(void* ctx, void* cursor, str text);
+
+	str metaenvironment_cursor_get_rest_of_section(void* ctx, void* cursor);
 ]]
 

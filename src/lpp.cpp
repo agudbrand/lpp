@@ -272,6 +272,11 @@ struct MetaprogramBuffer
  *              on the lua stack instead of popping it when its finished. I don't know if doing 
  *              this is fine during a luajit ffi call, though, and I can't seem to find anyone 
  *              on the internet or in the luajit docs mentioning doing something similar.
+ *              -- OK NOW this is not as possible because i've changed how buffers work,
+ *                 buffer data is no longer stored in lua, we store it in Metaenvironment::Sections.
+ *                 So this might just be how this has to be for now until I think of a better solution.
+ *                 This might not even be that much better than making a lua string and passing it 
+ *                 directly!!!!
  */ 
 MetaprogramBuffer process_file(MetaprogramContext* ctx, str path)
 {

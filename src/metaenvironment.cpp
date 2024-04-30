@@ -62,8 +62,7 @@ b8 Metaenvironment::process_sections()
 	lua->gettable(lua->gettop()-1);
 	defer { lua->pop(); };
 
-	s32 count = sections.len();
-	for (s32 i = 0; i < count; i++)
+	for (s32 i = 0; i < sections.len(); i++)
 	{
 		section_idx = i;
 		Section* current_section = &sections[i];
@@ -74,8 +73,8 @@ b8 Metaenvironment::process_sections()
 		// lua->stack_dump(1);
 
 		ExpansionMap* map = expansions.push();
-		map->old_range[0] = current_section->start_offset;
-		map->new_range[0] = output->cache.len;
+		map->old_offset = current_section->start_offset;
+		map->new_offset = output->cache.len;
 
 		switch (current_section->kind)
 		{
@@ -101,9 +100,9 @@ b8 Metaenvironment::process_sections()
 
 	for (ExpansionMap& m : expansions)
 	{
-		Source::Loc old = input->get_loc(m.old_range[0]);
-		Source::Loc nu  = output->get_loc(m.new_range[0]);
-		INFO(old.line, ":", old.column, "(", m.old_range[0], ") -> ", nu.line, ":", nu.column, "(", m.new_range[0], ")\n");
+		Source::Loc old = input->get_loc(m.old_offset);
+		Source::Loc nu  = output->get_loc(m.new_offset);
+		INFO(old.line, ":", old.column, "(", m.old_offset, ") -> ", nu.line, ":", nu.column, "(", m.new_offset, ")\n");
 	}
 
 
@@ -202,6 +201,45 @@ b8 metaenvironment_cursor_next_char(MetaprogramContext* ctx, Metaenvironment::Cu
 u32  metaenvironment_cursor_current_codepoint(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor)
 {
 	return cursor->current_codepoint.codepoint;
+}
+
+/* ------------------------------------------------------------------------------------------------ metaenvironment_cursor_current_codepoint
+ */
+b8 metaenvironment_cursor_insert_string(
+		MetaprogramContext* ctx, 
+		Metaenvironment::Cursor* cursor, 
+		str text)
+{
+	// this is horrible and should definitely be cleaned up later 
+	Metaenvironment* me = ctx->metaenv;
+	me->sections.insert(cursor->section_idx+1);
+	me->sections.insert(cursor->section_idx+1);
+	Metaenvironment::Section* exp  = &me->sections[cursor->section_idx+1];
+	Metaenvironment::Section* post = &me->sections[cursor->section_idx+2];
+	Metaenvironment::Section* pre  = &me->sections[cursor->section_idx];
+	post->mem.open(cursor->range.len);
+	exp->mem.open(text.len);
+	post->mem.write(cursor->range);
+	pre->mem.len = cursor->range.bytes - pre->mem.buffer;
+	exp->mem.write(text);
+	exp->start_offset = pre->mem.len + pre->start_offset;
+	exp->range = exp->mem.as_str();
+	post->range = post->mem.as_str();
+	post->start_offset = exp->mem.len + exp->start_offset;
+	pre->range = pre->mem.as_str();
+	cursor->range = exp->range;
+	cursor->section_idx += 1;
+	cursor->current_codepoint = cursor->range.advance();
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ metaenvironment_cursor_get_rest_of_section
+ */
+str metaenvironment_cursor_get_rest_of_section(
+		MetaprogramContext* ctx, 
+		Metaenvironment::Cursor* cursor)
+{
+	return cursor->range;
 }
 
 }

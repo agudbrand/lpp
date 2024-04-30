@@ -31,11 +31,11 @@ struct Metaenvironment
 			Macro,
 		};
 		
-		u64 start_offset;
-		Kind kind;
+		u64 start_offset = -1;
+		Kind kind = Kind::Document;
 
-		io::Memory mem;
-		str range;
+		io::Memory mem = {};
+		str range = {};
 	};
 
 	Array<Section> sections;
@@ -44,8 +44,8 @@ struct Metaenvironment
      */
 	struct ExpansionMap
 	{
-		u64 old_range[2];
-		u64 new_range[2];
+		u64 old_offset;
+		u64 new_offset;
 	};
 
     /* ============================================================================================ Metaenvironment::Cursor
@@ -76,6 +76,8 @@ struct Metaenvironment
 	b8   init(Lpp* lpp, Source* input, Source* output);
 	void deinit();
 
+	Section* insert_section(u64 idx);
+
 	void add_document_section(u64 start, str s);
 	void add_macro_section(s64 start);
 
@@ -102,6 +104,8 @@ struct SourceLoc
 
 // TODO(sushi) this might not make sense?
 SourceLoc metaenvironment_cursor_source_loc(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+
+b8 metaenvironment_cursor_insert_string(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor, str text);
 
 }
 

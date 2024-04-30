@@ -57,7 +57,7 @@ int main(int argc, char** argv)
 	if (!outfile.open("temp/out"_str, io::Flag::Writable, io::FileDescriptor::Flag::Create))
 		return 1;
 
-	if (!lpp.run_metaprogram(m, &mp, &out))
+	if (!lpp.run_metaprogram(m, &mp, &outfile))
 		return 1;
 
 	outfile.close();

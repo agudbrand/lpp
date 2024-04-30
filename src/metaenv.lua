@@ -199,6 +199,15 @@ Cursor.next_char = function(self)
 	return 0 ~= C.metaenvironment_cursor_next_char(lpp.context, self.handle)
 end
 
+Cursor.write = function(self, str)
+	return 0 ~= C.metaenvironment_cursor_insert_string(lpp.context, self.handle, make_str(str))
+end
+
+Cursor.get_following_string = function(self)
+	local s = C.metaenvironment_cursor_get_rest_of_section(lpp.context, self.handle)
+	return ffi.string(s.s, s.len)
+end
+
 lpp.get_output_so_far = function()
 	return menv.output:tostring()
 end
