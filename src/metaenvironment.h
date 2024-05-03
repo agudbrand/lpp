@@ -76,25 +76,25 @@ struct Metaenvironment
 	b8   init(Lpp* lpp, Source* input, Source* output);
 	void deinit();
 
-	Section* insert_section(u64 idx);
+	Section* insertSection(u64 idx);
 
-	void add_document_section(u64 start, str s);
-	void add_macro_section(s64 start);
+	void addDocumentSection(u64 start, str s);
+	void addMacroSection(s64 start);
 
-	b8 process_sections();
+	b8 processSections();
 };
 
 extern "C"
 {
 
-void metaenvironment_add_macro_section(MetaprogramContext* ctx, u64 start);
-void metaenvironment_add_document_section(MetaprogramContext* ctx, u64 start, str s);
+void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start);
+void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
 
-Metaenvironment::Cursor* metaenvironment_new_cursor_after_section(MetaprogramContext* ctx);
-void metaenvironment_delete_cursor(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+Metaenvironment::Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
+void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
 
-b8  metaenvironment_cursor_next_char(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
-u32 metaenvironment_cursor_current_codepoint(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+b8  metaenvironmentCursorNextChar(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+u32 metaenvironmentCursorCurrentCodepoint(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
 
 struct SourceLoc
 {
@@ -103,9 +103,9 @@ struct SourceLoc
 };
 
 // TODO(sushi) this might not make sense?
-SourceLoc metaenvironment_cursor_source_loc(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+SourceLoc metaenvironmentCursorSourceLoc(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
 
-b8 metaenvironment_cursor_insert_string(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor, str text);
+b8 metaenvironmentCursorInsertString(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor, str text);
 
 }
 

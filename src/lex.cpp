@@ -11,16 +11,16 @@ u32 Lexer::current()    { return cursor_codepoint; }
 u8* Lexer::currentptr() { return cursor.bytes - cursor_codepoint.advance; }
 
 b8 Lexer::at(u8 c) { return current() == c; }
-b8 Lexer::eof()    { return at(0) || !cursor_codepoint.is_valid(); }
+b8 Lexer::eof()    { return at(0) || !cursor_codepoint.isValid(); }
 
-b8 Lexer::at_first_identifier_char() { return isalpha(current()) || at('_'); }
-b8 Lexer::at_identifier_char() { return at_first_identifier_char() || isdigit(current()); }
+b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
+b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
 
 void Lexer::advance(s32 n)
 {
-    auto read_stream_if_needed = [this]()
+    auto readStreamIfNeeded = [this]()
     {
-        if (source->cache.at_end() ||
+        if (source->cache.atEnd() ||
             cursor.isempty())
         {
             u8* ptr = source->cache.reserve(128);
@@ -28,7 +28,7 @@ void Lexer::advance(s32 n)
             if (!bytes_read)
             {
                 cursor_codepoint = utf8::Codepoint::invalid();
-                error_here("failed to read more bytes from input stream");
+                errorHere("failed to read more bytes from input stream");
 				longjmp(err_handler, 0);
             }
             source->cache.commit(bytes_read);
@@ -37,16 +37,16 @@ void Lexer::advance(s32 n)
         }
     };
 
-    read_stream_if_needed();
+    readStreamIfNeeded();
 
 	for (s32 i = 0; i < n; i++)
 	{
-        read_stream_if_needed();
+        readStreamIfNeeded();
         cursor_codepoint = cursor.advance();
 
         if (!cursor_codepoint)
         {
-            error_here("encountered invalid codepoint!");
+            errorHere("encountered invalid codepoint!");
             longjmp(err_handler, 0);
         }
 
@@ -63,7 +63,7 @@ void Lexer::advance(s32 n)
 	}
 }
 
-void Lexer::skip_whitespace()
+void Lexer::skipWhitespace()
 {
 	while (isspace(current()))
 		advance();
@@ -97,7 +97,7 @@ void Lexer::deinit()
 	*this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------ Lexer::next_token
+/* ------------------------------------------------------------------------------------------------ Lexer::nextToken
  */
 b8 Lexer::run()
 {
@@ -107,21 +107,21 @@ b8 Lexer::run()
 
 	for (;;)
 	{
-		init_curt();
-		skip_whitespace();
+		initCurt();
+		skipWhitespace();
 
 		while (not at('@') and
 			   not at('$') and
 			   not eof())
 			advance();
 
-		finish_curt(Document);
+		finishCurt(Document);
 
 		if (eof())
 		{
-			init_curt();
+			initCurt();
 			advance();
-			finish_curt(Eof);
+			finishCurt(Eof);
 			return true;
 		}
 
@@ -134,7 +134,7 @@ b8 Lexer::run()
 				if (at('$'))
 				{
 					advance();
-					init_curt();
+					initCurt();
 
 					for (;;)
 					{
@@ -143,31 +143,31 @@ b8 Lexer::run()
 							(advance(), at('$')))
 						{
 							advance();
-							finish_curt(LuaBlock, -3);
+							finishCurt(LuaBlock, -3);
 							break;
 						}
 
 						if (eof())
-							return error_at_token(curt, "unexpected eof while consuming lua block");
+							return errorAtToken(curt, "unexpected eof while consuming lua block");
 					}
 				}
 				else
 				{
 					// dont handle this case for now 
-					return error_here("two '$' in a row is currently unrecognized");
+					return errorHere("two '$' in a row is currently unrecognized");
 				}
 			}
 			else if (at('('))
 			{
 				advance();
-				init_curt();
+				initCurt();
 
 				s64 nesting = 1;
 				for (;;)
 				{
 					advance();
 					if (eof()) 
-						return error_at_token(curt, "unexpected eof while consuming inline lua expression");
+						return errorAtToken(curt, "unexpected eof while consuming inline lua expression");
 					
 					if (at('(')) 
 						nesting += 1;
@@ -180,16 +180,16 @@ b8 Lexer::run()
 					}
 				}
 
-				finish_curt(LuaInline);
+				finishCurt(LuaInline);
 				advance();
 			}
 			else
 			{
-				init_curt();
+				initCurt();
 				while (not at('\n') and not eof())
 					advance();
 
-				finish_curt(LuaLine);
+				finishCurt(LuaLine);
 
 				if (not eof())
 					advance();
@@ -199,7 +199,7 @@ b8 Lexer::run()
 				if (tokens.len() != 0)
 				{
 					Token* last = tokens.arr + tokens.len() - 2;
-					str raw = source->get_str(last->source_location, last->length);
+					str raw = source->getStr(last->source_location, last->length);
 					while (isspace(raw.bytes[last->length-1]) && raw.bytes[last->length-1] != '\n')
 						last->length -= 1;
 				}
@@ -207,44 +207,44 @@ b8 Lexer::run()
 		}
 		else if (at('@'))
 		{
-			init_curt();
+			initCurt();
 			advance();
-			finish_curt(MacroSymbol);
+			finishCurt(MacroSymbol);
 
-			skip_whitespace();
-			init_curt();
+			skipWhitespace();
+			initCurt();
 
-			if (not at_first_identifier_char())
-				return error_here("expected an identifier of a macro after '@'");
+			if (not atFirstIdentifierChar())
+				return errorHere("expected an identifier of a macro after '@'");
 			
 			// NOTE(sushi) allow '.' so that we can index tables through macros, eg.
 			//             $ local lib = {}
 			//             $ lib.func = function() print("hi!") end
 			//
 			//             @lib.func()
-			while (at_identifier_char() or at('.'))
+			while (atIdentifierChar() or at('.'))
 				advance();
 			
-			finish_curt(MacroIdentifier);
-			skip_whitespace();
+			finishCurt(MacroIdentifier);
+			skipWhitespace();
 
 			switch (current())
 			{
 			case '(':
 				advance();
-				skip_whitespace();
+				skipWhitespace();
 
 				if (at(')'))
 				{
 					// dont create a token for empty macro args
 					advance();
-					init_curt();
+					initCurt();
 					break;
 				}
 
 				for (;;)
 				{
-					init_curt();
+					initCurt();
 
 					while (not at(',') and 
 						   not at(')') and 
@@ -252,35 +252,35 @@ b8 Lexer::run()
 						advance();
 
 					if (eof())
-						return error_at_token(curt, "unexpected end of file while consuming macro arguments");
+						return errorAtToken(curt, "unexpected end of file while consuming macro arguments");
 
-					finish_curt(MacroArgumentTupleArg);
+					finishCurt(MacroArgumentTupleArg);
 
 					if (at(')'))
 						break;
 
 					advance();
-					skip_whitespace();
+					skipWhitespace();
 				}
 
 				advance();
-				init_curt();
+				initCurt();
 				break;
 
 			case '"':
 				advance();
-				init_curt();
+				initCurt();
 
 				for (;;)
 				{
 					advance();
 					if (eof())
-						return error_at_token(curt, "unexpected end of file while consuming macro string argument");
+						return errorAtToken(curt, "unexpected end of file while consuming macro string argument");
 
 					if (at('"'))
 						break;
 				}
-				finish_curt(MacroArgumentString);
+				finishCurt(MacroArgumentString);
 				advance();
 				break;
 			}
@@ -294,17 +294,17 @@ b8 Lexer::run()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lexer::reset_token
+/* ------------------------------------------------------------------------------------------------ Lexer::resetToken
  */
-void Lexer::init_curt()
+void Lexer::initCurt()
 {
 	curt.kind = Token::Kind::Eof;
 	curt.source_location = currentptr() - source->cache.buffer;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lexer::finish_token
+/* ------------------------------------------------------------------------------------------------ Lexer::finishToken
  */
-void Lexer::finish_curt(Token::Kind kind, s32 len_offset)
+void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 {
 	s32 len = (currentptr() - source->cache.buffer) - curt.source_location;
 	if (len != 0)
@@ -315,138 +315,4 @@ void Lexer::finish_curt(Token::Kind kind, s32 len_offset)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ Lexer::consume_document_text
- */
-b8 Lexer::consume_document_text()
-{
-	// init_curt();
 
-	while (not at('@') and
-		   not at('$') and 
-		   not eof())
-		advance();
-
-	finish_curt(Document);
-
-	return true;
-}
-
-/* ------------------------------------------------------------------------------------------------ Lexer::consume_lua_code
- */
-b8 Lexer::consume_lua_code()
-{
-	advance();
-	if (at('$'))
-	{
-		advance();
-		if (at('$'))
-		{
-			advance();
-			init_curt();
-			for (;;)
-			{
-				if ((advance(), at('$')) and
-					(advance(), at('$')) and
-					(advance(), at('$')))
-				{
-					advance();
-					finish_curt(LuaBlock, -3);
-					return true;
-				}
-
-				if (eof())
-					return error_at_token(curt, "unexpected eof while consuming lua block");
-			}
-		}
-		else
-		{
-			// dont handle this case for now
-			// TODO(sushi) decide what should be done in this case later on
-			return error_here("two of '$' in a row is unrecognized!");
-		}
-	}
-	else if (at('('))
-	{
-		advance();
-		init_curt();
-
-		s64 nesting = 1;
-
-		for (;;)
-		{
-			advance();
-			if      (eof()) break;
-			else if (at('(')) nesting += 1;
-			else if (at(')'))
-			{
-				if (nesting == 1)
-					break;
-				else
-					nesting -= 1;
-			}
-		}
-
-		if (eof())
-			return error_at_token(curt, "unexpected eof while consuming inline lua");
-
-		advance();
-		finish_curt(LuaInline, -1);
-		return true;
-	}
-	else
-	{
-		init_curt();
-		while (not at('\n') and not eof())
-			advance();
-
-		finish_curt(LuaLine);
-
-		if (not eof())
-			advance();
-
-		return true;
-	}
-
-}
-
-/* ------------------------------------------------------------------------------------------------ Lexer::consume_macro_identifier
- */
-b8 Lexer::consume_macro_identifier()
-{
-	init_curt();
-
-	if (not at_first_identifier_char())
-		return error_here("expected an identifier of a macro after '@'");
-
-	while (at_identifier_char())
-		advance();
-
-	finish_curt(MacroIdentifier);
-
-	return true;
-}
-
-/* ------------------------------------------------------------------------------------------------ Lexer::consume_macro_tuple_argument
- */
-b8 Lexer::consume_macro_tuple_argument()
-{
-	if (at(')'))
-	{
-		advance();
-		return consume_document_text();
-	}
-
-	init_curt();
-
-	while (not at(',') and 
-		   not at(')') and 
-		   not eof())
-		advance();
-
-	if (eof())
-		return error_at_token(curt, "unexpected eof while consuming macro tuple arguments");
-
-	finish_curt(MacroArgumentTupleArg);
-
-	return true;
-}

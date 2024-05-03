@@ -44,19 +44,19 @@ struct Lpp
     b8   init(Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();
 
-	Metaprogram create_metaprogram(str name, io::IO* input_stream, io::IO* output_stream);
-	b8 run_metaprogram(Metaprogram ctx, io::IO* input_stream, io::IO* output_stream);
+	Metaprogram createMetaprogram(str name, io::IO* input_stream, io::IO* output_stream);
+	b8 runMetaprogram(Metaprogram ctx, io::IO* input_stream, io::IO* output_stream);
 
 private:
 
 	io::Memory metaenv_chunk; // i dont think this is necessary but i dont remember why
 
-	b8 cache_metaenvironment();
-	static int cache_writer(lua_State* L, const void* p, size_t sz, void* ud);
+	b8 cacheMetaenvironment();
+	static int cacheWriter(lua_State* L, const void* p, size_t sz, void* ud);
 
 	// loads a new metaenv from the cached chunk and leaves it at the top of 
 	// the lua stack
-	b8 load_metaenvironment();
+	b8 loadMetaenvironment();
 
 }; 
 

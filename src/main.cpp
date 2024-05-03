@@ -33,7 +33,7 @@ int main(int argc, char** argv)
 	out.open(1);
 	defer { out.close(); };
 
-	iro::log.new_destination("stdout"_str, &out, Log::Dest::Flags::all());
+	iro::log.newDestination("stdout"_str, &out, Log::Dest::Flags::all());
 
 	io::FileDescriptor testlpp;
 	if (!testlpp.open("test.lpp"_str, io::Flag::Readable))
@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 	io::Memory mp;
 	mp.open();
 
-	Metaprogram m = lpp.create_metaprogram("test.lpp"_str, &testlpp, &mp);
+	Metaprogram m = lpp.createMetaprogram("test.lpp"_str, &testlpp, &mp);
 	if (!m)
 		return 1;
 
@@ -57,7 +57,7 @@ int main(int argc, char** argv)
 	if (!outfile.open("temp/out"_str, io::Flag::Writable, io::FileDescriptor::Flag::Create))
 		return 1;
 
-	if (!lpp.run_metaprogram(m, &mp, &outfile))
+	if (!lpp.runMetaprogram(m, &mp, &outfile))
 		return 1;
 
 	outfile.close();

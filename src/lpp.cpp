@@ -25,8 +25,8 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	lua.init(verbosity);
 
 	DEBUG("creating metaenv stack\n");
-	lua.newtable();
-	lua.setglobal(lpp_metaenv_stack);
+	lua.newTable();
+	lua.setGlobal(lpp_metaenv_stack);
 
 	DEBUG("creating pools\n");
 	contexts = Pool<MetaprogramContext>::create();
@@ -34,13 +34,13 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	metaenvs = Pool<Metaenvironment>::create();
 
 	DEBUG("loading luajit ffi\n");
-	if (!lua.dofile("src/cdefs.lua"))
+	if (!lua.doFile("src/cdefs.lua"))
 	{
 		ERROR("failed to load luajit ffi\n");
 		return false;
 	}
 
-	if (!cache_metaenvironment())
+	if (!cacheMetaenvironment())
 		return false;
 
     return true;
@@ -63,9 +63,9 @@ void Lpp::deinit()
 	*this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::create_metaprogram
+/* ------------------------------------------------------------------------------------------------ Lpp::createMetaprogram
  */
-Metaprogram Lpp::create_metaprogram(
+Metaprogram Lpp::createMetaprogram(
 		str     name,
 		io::IO* instream, 
 		io::IO* outstream)
@@ -99,9 +99,9 @@ Metaprogram Lpp::create_metaprogram(
 	return ctx;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::run_metaprogram
+/* ------------------------------------------------------------------------------------------------ Lpp::runMetaprogram
  */
-b8 Lpp::run_metaprogram(
+b8 Lpp::runMetaprogram(
 		Metaprogram metaprogram,
 		io::IO* input_stream, 
 		io::IO* output_stream)
@@ -118,7 +118,7 @@ b8 Lpp::run_metaprogram(
 		return false;
 	}
 
-	if (!load_metaenvironment())
+	if (!loadMetaenvironment())
 		return false;
 
 	if (!lua.pcall(0, 2))
@@ -129,31 +129,31 @@ b8 Lpp::run_metaprogram(
 
 	// the lpp table is at the top of the stack and we need to give it 
 	// a handle to this context
-	lua.pushstring("context"_str);
-	lua.pushlightuserdata(ctx);
-	lua.settable(-3);
+	lua.pushString("context"_str);
+	lua.pushLightUserdata(ctx);
+	lua.setTable(-3);
 	lua.pop();
 
 	// set the new metaenvironment's __index to point 
 	// at the previous one so that any global variables 
 	// declared in it will be available
-	lua.getglobal(lpp_metaenv_stack);
-	s32 stacklen = lua.objlen();
-	lua.pushstring("__index"_str);
-	lua.pushinteger(stacklen);
-	lua.gettable(lua.gettop()-2);
+	lua.getGlobal(lpp_metaenv_stack);
+	s32 stacklen = lua.objLen();
+	lua.pushString("__index"_str);
+	lua.pushInteger(stacklen);
+	lua.getTable(lua.getTop()-2);
 
-	if (!lua.isnil())
-		lua.settable(-4);
+	if (!lua.isNil())
+		lua.setTable(-4);
 	else
 		lua.pop(2);
 
-	lua.pushinteger(stacklen+1);
-	lua.pushvalue(-3);
-	lua.settable(-3);
+	lua.pushInteger(stacklen+1);
+	lua.pushValue(-3);
+	lua.setTable(-3);
 	lua.pop();
 
-	if (!lua.setfenv(-2))
+	if (!lua.setfEnv(-2))
 	{
 		ERROR("failed to set environment of metaprogram\n");
 		return false;
@@ -165,26 +165,26 @@ b8 Lpp::run_metaprogram(
 		return false;
 	}
 
-	lua.getglobal(lpp_metaenv_stack);
-	lua.pushinteger(lua.objlen());
-	lua.gettable(-2);
-	lua.pushstring("__metaenv"_str);
-	lua.gettable(-2);
+	lua.getGlobal(lpp_metaenv_stack);
+	lua.pushInteger(lua.objLen());
+	lua.getTable(-2);
+	lua.pushString("__metaenv"_str);
+	lua.getTable(-2);
 
-	if (!ctx->metaenv->process_sections())
+	if (!ctx->metaenv->processSections())
 		return false;
 
 	lua.pop(2);
 
-	output_stream->write(ctx->metaenv->output->cache.as_str());
+	output_stream->write(ctx->metaenv->output->cache.asStr());
 	lua.pop();
 
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::cache_writer
+/* ------------------------------------------------------------------------------------------------ Lpp::cacheWriter
  */
-int Lpp::cache_writer(lua_State* L, const void* p, size_t sz, void* ud)
+int Lpp::cacheWriter(lua_State* L, const void* p, size_t sz, void* ud)
 {
 	Lpp* lpp = (Lpp*)ud;
 
@@ -194,13 +194,13 @@ int Lpp::cache_writer(lua_State* L, const void* p, size_t sz, void* ud)
 	return 0;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::cache_metaenvironment
+/* ------------------------------------------------------------------------------------------------ Lpp::cacheMetaenvironment
  */
-b8 Lpp::cache_metaenvironment()
+b8 Lpp::cacheMetaenvironment()
 {
 	DEBUG("caching metaenvironment\n");
 
-	if (!lua.loadfile("src/metaenv.lua"))
+	if (!lua.loadFile("src/metaenv.lua"))
 	{
 		ERROR("failed to load metaenvironment\n");
 		return false;
@@ -221,9 +221,9 @@ b8 Lpp::cache_metaenvironment()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironment_loader
+/* ------------------------------------------------------------------------------------------------ metaenvironmentLoader
  */
-const char* metaenvironment_loader(lua_State* L, void* data, size_t* size)
+const char* metaenvironmentLoader(lua_State* L, void* data, size_t* size)
 {
 	io::Memory* m = (io::Memory*)data;
 	*size = m->len;
@@ -232,7 +232,7 @@ const char* metaenvironment_loader(lua_State* L, void* data, size_t* size)
 
 /* ------------------------------------------------------------------------------------------------ Lpp::load_metaenvironment
  */
-b8 Lpp::load_metaenvironment()
+b8 Lpp::loadMetaenvironment()
 {
 	defer { metaenv_chunk.rewind(); };
 
@@ -257,7 +257,7 @@ struct MetaprogramBuffer
 	u64         memsize;
 };
 
-/* ------------------------------------------------------------------------------------------------ create_metaprogram
+/* ------------------------------------------------------------------------------------------------ processFile
  *  Wrapper around an lpp context's create_metaprogram() and run_metaprogram(). This creates a 
  *  metaprogram, executes it, and then returns a handle to the memory buffer its stored in along 
  *  with the size needed to store it in memory. This must be passed back into 
@@ -278,7 +278,7 @@ struct MetaprogramBuffer
  *                 This might not even be that much better than making a lua string and passing it 
  *                 directly!!!!
  */ 
-MetaprogramBuffer process_file(MetaprogramContext* ctx, str path)
+MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 {
 	Lpp* lpp = ctx->lpp;
 
@@ -290,7 +290,7 @@ MetaprogramBuffer process_file(MetaprogramContext* ctx, str path)
 	mp.open();
 	defer { mp.close(); };
 
-	Metaprogram m = lpp->create_metaprogram(path, &f, &mp);
+	Metaprogram m = lpp->createMetaprogram(path, &f, &mp);
 	if (!m)
 		return {};
 	defer { lpp->contexts.remove((MetaprogramContext*)m); };
@@ -304,7 +304,7 @@ MetaprogramBuffer process_file(MetaprogramContext* ctx, str path)
 	io::Memory* result = new io::Memory;
 	result->open();
 
-	if (!lpp->run_metaprogram(m, &mp, result))
+	if (!lpp->runMetaprogram(m, &mp, result))
 		return {};
 
 	MetaprogramBuffer out;
@@ -313,11 +313,11 @@ MetaprogramBuffer process_file(MetaprogramContext* ctx, str path)
 	return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ get_metaprogram_result
+/* ------------------------------------------------------------------------------------------------ getMetaprogramResult
  *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram cannot be retrieved 
  *  for some reason then 'outbuf' should be null. Frees the metaprogram memory in anycase.
  */
-void get_metaprogram_result(MetaprogramBuffer mpbuf, void* outbuf)
+void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
 {
 	if (outbuf)
 	{

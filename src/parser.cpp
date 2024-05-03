@@ -35,7 +35,7 @@ b8 Parser::init(
 
 	curt = lexer.tokens.arr-1;
 
-	src->cache_line_offsets();
+	src->cacheLineOffsets();
 	return true;
 }
 
@@ -53,7 +53,7 @@ b8 Parser::run()
 {
 	TRACE("begin\n");
 
-	next_token();
+	nextToken();
 
 	for (;;)
 	{
@@ -68,69 +68,69 @@ b8 Parser::run()
 				return false;
 
 			case Document:
-				TRACE("placing document text: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out("__metaenv.doc("_str, curt->source_location, ",\""_str);
+				TRACE("placing document text: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				writeOut("__metaenv.doc("_str, curt->source_location, ",\""_str);
 				// sanitize the document text's control characters into lua's represenatations of them
-				for (u8 c : get_raw())
+				for (u8 c : getRaw())
 				{
 					if (iscntrl(c))
-						write_out("\\"_str, c);
+						writeOut("\\"_str, c);
 					else if (c == '"')
-						write_out("\\\""_str);
+						writeOut("\\\""_str);
 					else if (c == '\\')
-						write_out("\\\\"_str);
+						writeOut("\\\\"_str);
 					else 
-						write_out((char)c);
+						writeOut((char)c);
 				}
 
-				write_out("\")\n"_str);
-				next_token();
+				writeOut("\")\n"_str);
+				nextToken();
 				break;
 
 			case LuaBlock:
-				TRACE("placing lua block: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out(get_raw(), "\n");
-				next_token();
+				TRACE("placing lua block: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				writeOut(getRaw(), "\n");
+				nextToken();
 				break;
 
 			case LuaLine:
-				TRACE("placing lua line: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out(get_raw(), "\n");
-				next_token();
+				TRACE("placing lua line: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				writeOut(getRaw(), "\n");
+				nextToken();
 				break;
 
 			case LuaInline:
-				TRACE("placing lua inline: '", io::SanitizeControlCharacters(get_raw()), "'\n");
-				write_out("__metaenv.val("_str, curt->source_location, ",", get_raw(), ")\n"_str);
-				next_token();
+				TRACE("placing lua inline: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				writeOut("__metaenv.val("_str, curt->source_location, ",", getRaw(), ")\n"_str);
+				nextToken();
 				break;
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
-				write_out("__metaenv.macro("_str, curt->source_location, ',');
+				writeOut("__metaenv.macro("_str, curt->source_location, ',');
 
-				next_token(); // identifier
-				write_out(get_raw());
+				nextToken(); // identifier
+				writeOut(getRaw());
 
-				next_token();
+				nextToken();
 				if (at(MacroArgumentTupleArg))
 				{
 					for (;;)
 					{
-						write_out(',', '"', get_raw(), '"');
-						next_token();
+						writeOut(',', '"', getRaw(), '"');
+						nextToken();
 						if (not at(MacroArgumentTupleArg))
 							break;
-						write_out(',');
+						writeOut(',');
 					}
 				}
 				else if (at(MacroArgumentString))
 				{
-					write_out(',', '"', get_raw(), '"');
-					next_token();
+					writeOut(',', '"', getRaw(), '"');
+					nextToken();
 				}
 
-				write_out(")\n"_str);
+				writeOut(")\n"_str);
 				break;
 		}
 	}
@@ -140,9 +140,9 @@ b8 Parser::run()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::next_token
+/* ------------------------------------------------------------------------------------------------ Parser::nextToken
  */
-b8 Parser::next_token()
+b8 Parser::nextToken()
 {
 	curt += 1;
 	return true;
@@ -155,9 +155,9 @@ b8 Parser::at(Token::Kind kind)
 	return curt->kind == kind;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::get_raw
+/* ------------------------------------------------------------------------------------------------ Parser::getRaw
  */
-str Parser::get_raw()
+str Parser::getRaw()
 {
-	return curt->get_raw(source);
+	return curt->getRaw(source);
 }

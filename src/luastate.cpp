@@ -38,14 +38,14 @@ void LuaState::pop(s32 count)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::gettop
  */
-s32 LuaState::gettop()
+s32 LuaState::getTop()
 {
 	return lua_gettop(L);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::tostring
  */
-str LuaState::tostring(s32 idx)
+str LuaState::toString(s32 idx)
 {
 	size_t len;
 	const char* s = lua_tolstring(L, idx, &len);
@@ -54,42 +54,42 @@ str LuaState::tostring(s32 idx)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::newtable
  */
-void LuaState::newtable()
+void LuaState::newTable()
 {
 	lua_newtable(L);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::settable
  */
-void LuaState::settable(s32 idx)
+void LuaState::setTable(s32 idx)
 {
 	lua_settable(L, idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::gettable
  */
-void LuaState::gettable(s32 idx)
+void LuaState::getTable(s32 idx)
 {
 	lua_gettable(L, idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::setglobal
  */
-void LuaState::setglobal(const char* name)
+void LuaState::setGlobal(const char* name)
 {
 	lua_setglobal(L, name);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::getglobal
  */
-void LuaState::getglobal(const char* name)
+void LuaState::getGlobal(const char* name)
 {
 	lua_getglobal(L, name);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::objlen
  */
-s32 LuaState::objlen(s32 idx)
+s32 LuaState::objLen(s32 idx)
 {
 	return lua_objlen(L, idx);
 }
@@ -111,7 +111,7 @@ b8 LuaState::load(io::IO* in, const char* name)
 
 	if (lua_load(L, reader, &d, name))
 	{
-		ERROR("load '", name, "' failed:\n", tostring(), "\n");
+		ERROR("load '", name, "' failed:\n", toString(), "\n");
 		pop();
 		return false;
 	}
@@ -121,7 +121,7 @@ b8 LuaState::load(io::IO* in, const char* name)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::loadbuffer
  */
-b8 LuaState::loadbuffer(str buffer, const char* name)
+b8 LuaState::loadBuffer(str buffer, const char* name)
 {
 	auto loader = [](lua_State* L, void* data, size_t* size) -> const char* 
 	{
@@ -132,7 +132,7 @@ b8 LuaState::loadbuffer(str buffer, const char* name)
 
 	if (lua_load(L, loader, &buffer, name))
 	{
-		ERROR("loadbuffer '", name, "' failed:\n", tostring(), "\n"); 
+		ERROR("loadbuffer '", name, "' failed:\n", toString(), "\n"); 
 		pop();
 		return false;
 	}
@@ -142,11 +142,11 @@ b8 LuaState::loadbuffer(str buffer, const char* name)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::loadfile
  */
-b8 LuaState::loadfile(const char* path)
+b8 LuaState::loadFile(const char* path)
 {
 	if (luaL_loadfile(L, path))
 	{
-		ERROR("loadfile '", path, "' failed: \n", tostring(), "\n");
+		ERROR("loadfile '", path, "' failed: \n", toString(), "\n");
 		pop();
 		return false;
 	}
@@ -156,11 +156,11 @@ b8 LuaState::loadfile(const char* path)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::loadstring
  */
-b8 LuaState::loadstring(const char* s)
+b8 LuaState::loadString(const char* s)
 {
 	if (luaL_loadstring(L, s))
 	{
-		ERROR("failed to load string:\n", tostring(), "\n");
+		ERROR("failed to load string:\n", toString(), "\n");
 		pop();
 		return false;
 	}
@@ -169,11 +169,11 @@ b8 LuaState::loadstring(const char* s)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::dofile
  */
-b8 LuaState::dofile(const char* s)
+b8 LuaState::doFile(const char* s)
 {
 	if(luaL_dofile(L, s))
 	{
-		ERROR("dofile(", s, ") failed:\n", tostring(), "\n");
+		ERROR("dofile(", s, ") failed:\n", toString(), "\n");
 		pop();
 		return false;
 	}
@@ -186,7 +186,7 @@ b8 LuaState::pcall(s32 nargs, s32 nresults, s32 errfunc)
 {
 	if (lua_pcall(L, nargs, nresults, errfunc))
 	{
-		ERROR(tostring(), "\n");
+		ERROR(toString(), "\n");
 		pop();
 		return false;
 	}
@@ -195,7 +195,7 @@ b8 LuaState::pcall(s32 nargs, s32 nresults, s32 errfunc)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::callmeta
  */
-b8 LuaState::callmeta(const char* name, s32 idx)
+b8 LuaState::callMeta(const char* name, s32 idx)
 {
 	if (!luaL_callmeta(L, idx, name))
 		return false;
@@ -204,18 +204,18 @@ b8 LuaState::callmeta(const char* name, s32 idx)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::getfenv
  */
-void LuaState::getfenv(s32 idx)
+void LuaState::getfEnv(s32 idx)
 {
 	lua_getfenv(L, idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::setfenv
  */
-b8 LuaState::setfenv(s32 idx)
+b8 LuaState::setfEnv(s32 idx)
 {
 	if (!lua_setfenv(L, idx))
 	{
-		ERROR("setfenv failed:\n", tostring(), "\n");
+		ERROR("setfenv failed:\n", toString(), "\n");
 		pop();
 		return false;
 	}
@@ -224,7 +224,7 @@ b8 LuaState::setfenv(s32 idx)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::pushstring
  */
-void LuaState::pushstring(str s)
+void LuaState::pushString(str s)
 {
 	// TODO(sushi) handle non-temrinated input
 	lua_pushlstring(L, (char*)s.bytes, s.len);
@@ -232,28 +232,28 @@ void LuaState::pushstring(str s)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::pushlightuserdata
  */
-void LuaState::pushlightuserdata(void* data)
+void LuaState::pushLightUserdata(void* data)
 {
 	lua_pushlightuserdata(L, data);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::pushinteger
  */
-void LuaState::pushinteger(s32 i)
+void LuaState::pushInteger(s32 i)
 {
 	lua_pushinteger(L, i);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::pushvalue
  */
-void LuaState::pushvalue(s32 idx)
+void LuaState::pushValue(s32 idx)
 {
 	lua_pushvalue(L, idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ LuaState::isnil
  */
-b8 LuaState::isnil(s32 idx)
+b8 LuaState::isNil(s32 idx)
 {
 	return lua_isnil(L, idx);
 }
@@ -282,7 +282,7 @@ b8 LuaState::dump(io::IO* dest)
 
 /* ------------------------------------------------------------------------------------------------ LuaState::stack_dump
  */
-void LuaState::stack_dump(u32 max_depth)
+void LuaState::stackDump(u32 max_depth)
 {
 	::stack_dump(L, max_depth);
 }

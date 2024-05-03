@@ -46,12 +46,12 @@ struct Token
 
 	static Token invalid() { return {Kind::Invalid}; }
 
-    b8 is_valid() { return kind != Kind::Invalid; }
+    b8 isValid() { return kind != Kind::Invalid; }
 
 	// retrieve the raw string this token encompasses from the given Source
-	str get_raw(Source* src) { return src->get_str(source_location, length); }
+	str getRaw(Source* src) { return src->getStr(source_location, length); }
 
-	static str kind_string(Kind kind)
+	static str getKindString(Kind kind)
 	{
 		using enum Kind;
 		switch (kind)
@@ -110,45 +110,40 @@ private:
 
 	Token curt;
 
-	void init_curt();
-	void finish_curt(Token::Kind kind, s32 len_offset = 0);
-
-	b8 consume_document_text();
-	b8 consume_lua_code(); // $
-	b8 consume_macro_identifier(); // @
-	b8 consume_macro_tuple_argument();
+	void initCurt();
+	void finishCurt(Token::Kind kind, s32 len_offset = 0);
 
 	u32 current();
     u8* currentptr();
 
 	b8 at(u8 c);
 	b8 eof();
-	b8 at_first_identifier_char();
-	b8 at_identifier_char();
-	b8 at_digit();
+	b8 atFirstIdentifierChar();
+	b8 atIdentifierChar();
+	b8 atDigit();
 
 	void advance(s32 n = 1);
-	void skip_whitespace();
+	void skipWhitespace();
 
 	template<typename... T>
-	b8 error_at(s32 line, s32 column, T... args)
+	b8 errorAt(s32 line, s32 column, T... args)
 	{
         ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
 		return false;
 	}
 
 	template<typename... T>
-	b8 error_at_token(Token& t, T... args)
+	b8 errorAtToken(Token& t, T... args)
 	{
-		Source::Loc loc = source->get_loc(t.source_location);
-		return error_at(loc.line, loc.column, args...);
+		Source::Loc loc = source->getLoc(t.source_location);
+		return errorAt(loc.line, loc.column, args...);
 	}
 
 	template<typename... T>
-	b8 error_here(T... args)
+	b8 errorHere(T... args)
 	{
-		Source::Loc loc = source->get_loc(cursor.bytes - source->cache.buffer);
-		return error_at(loc.line, loc.column, args...);
+		Source::Loc loc = source->getLoc(cursor.bytes - source->cache.buffer);
+		return errorAt(loc.line, loc.column, args...);
 	}
 
 };

@@ -33,14 +33,14 @@ struct Parser
 
 private:
 
-	b8 next_token();
+	b8 nextToken();
 
 	b8 at(Token::Kind kind);
 
-	str get_raw();
+	str getRaw();
 
 	template<typename... T>
-	void write_out(T... args)
+	void writeOut(T... args)
 	{
 		io::formatv(out, args...);
 	}

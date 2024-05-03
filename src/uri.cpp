@@ -36,7 +36,7 @@ b8 URI::parse(URI* uri, str s_)
 
 	uri->reset();
 
-	str::pos p = s.find_first(':');
+	str::pos p = s.findFirst(':');
 	if (!p)
 	{
 		ERROR("URI::parse(): failed to find ':' to delimit scheme in given string '", s_, "'\n");
@@ -47,10 +47,10 @@ b8 URI::parse(URI* uri, str s_)
 
 	s.bytes = s.bytes + p.x + 1;
 
-	if (s.starts_with("//"_str))
+	if (s.startsWith("//"_str))
 	{
 		s.bytes += 2;
-		if ((p = s.find_first('/')))
+		if ((p = s.findFirst('/')))
 		{
 			uri->authority.write(str{s.bytes, p});
 			s.bytes = s.bytes + p.x + 1;

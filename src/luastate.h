@@ -30,53 +30,53 @@ struct LuaState
 
 	void pop(s32 count = 1);
 
-	s32 gettop();
+	s32 getTop();
 
-	str tostring(s32 idx = -1);
+	str toString(s32 idx = -1);
 
-	void newtable();
+	void newTable();
 
 	// Does t[k] = v where v is the value at the top of the stack, k is the 
 	// value just below the top, and t is the table at the given index.
 	// Pops the key and value from the stack.
-	void settable(s32 idx);
+	void setTable(s32 idx);
 
 	// Does t[k] where k is the value at the top of the stack and t
 	// is table at the given index. Leaves the result on the top 
 	// of the stack and pops k.
-	void gettable(s32 idx);
+	void getTable(s32 idx);
 
-	void setglobal(const char* name);
-	void getglobal(const char* name);
+	void setGlobal(const char* name);
+	void getGlobal(const char* name);
 
-	s32 objlen(s32 idx = -1);
+	s32 objLen(s32 idx = -1);
 
 	b8 load(io::IO* in, const char* name);
-	b8 loadbuffer(str buffer, const char* name);
-	b8 loadfile(const char* path);
-	b8 loadstring(const char* s);
-	b8 dofile(const char* s);
+	b8 loadBuffer(str buffer, const char* name);
+	b8 loadFile(const char* path);
+	b8 loadString(const char* s);
+	b8 doFile(const char* s);
 
 	b8 pcall(s32 nargs = 0, s32 nresults = 0, s32 errfunc = 0);
-	b8 callmeta(const char* name, s32 idx = -1);
+	b8 callMeta(const char* name, s32 idx = -1);
 
 	// pushes onto the stack the environment table of the value 
 	// at the given index
-	void getfenv(s32 idx);
+	void getfEnv(s32 idx);
 	// pops table at the top of the stack and sets it as the environment 
 	// for the value at the given index
-	b8 setfenv(s32 idx);
+	b8 setfEnv(s32 idx);
 
-	void pushstring(str s);
-	void pushlightuserdata(void* data);
-	void pushinteger(s32 i);
-	void pushvalue(s32 idx);
+	void pushString(str s);
+	void pushLightUserdata(void* data);
+	void pushInteger(s32 i);
+	void pushValue(s32 idx);
 
-	b8 isnil(s32 idx = -1);
+	b8 isNil(s32 idx = -1);
 
 	b8 dump(io::IO* dest);
 
-	void stack_dump(u32 max_depth = -1);
+	void stackDump(u32 max_depth = -1);
 };
 
 #endif // _lpp_luastate_h

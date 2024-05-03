@@ -23,18 +23,18 @@ void Source::deinit()
 	*this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------ Source::write_cache
+/* ------------------------------------------------------------------------------------------------ Source::writeCache
  */
-b8 Source::write_cache(Bytes slice)
+b8 Source::writeCache(Bytes slice)
 {
 	line_offsets_calculated = false;
 	cache.write(slice);
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Source::cache_line_offsets
+/* ------------------------------------------------------------------------------------------------ Source::cacheLineOffsets
  */
-b8 Source::cache_line_offsets()
+b8 Source::cacheLineOffsets()
 {
 	if (line_offsets_calculated)
 		return true;
@@ -45,7 +45,7 @@ b8 Source::cache_line_offsets()
 
 	line_offsets.push(0);
 
-	str s = cache.as_str();
+	str s = cache.asStr();
 	for (s64 i = 0; i < s.len; i++)
 	{
 		if (s.bytes[i] == '\n')
@@ -56,16 +56,16 @@ b8 Source::cache_line_offsets()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Source::get_str
+/* ------------------------------------------------------------------------------------------------ Source::getStr
  */
-str Source::get_str(u64 loc, u64 len)
+str Source::getStr(u64 loc, u64 len)
 {
 	return {cache.buffer + loc, len};
 }
 
-/* ------------------------------------------------------------------------------------------------ Source::get_loc
+/* ------------------------------------------------------------------------------------------------ Source::getLoc
  */
-Source::Loc Source::get_loc(u64 loc)
+Source::Loc Source::getLoc(u64 loc)
 {
 	u64 l = 0, 
 		m = 0, 
@@ -94,76 +94,10 @@ Source::Loc Source::get_loc(u64 loc)
 	{
 		if (offset >= loc)
 			break;
-		utf8::Codepoint c = utf8::decode_character(cache.buffer + offset, 4);
+		utf8::Codepoint c = utf8::decodeCharacter(cache.buffer + offset, 4);
 		offset += c.advance;
 		column += 1;
 	}
 
 	return {m+1, column};
-}
-
-/* ------------------------------------------------------------------------------------------------ C api
- */
-extern "C"
-{
-
-/* ------------------------------------------------------------------------------------------------ source_create
- */
-Source* source_create(MetaprogramContext* ctx, str name)
-{
-	Source* source = ctx->lpp->sources.add();
-	source->init(name);
-	return source;
-}
-
-/* ------------------------------------------------------------------------------------------------ source_destroy
- */
-void source_destroy(MetaprogramContext* ctx, Source* source)
-{
-	source->deinit();
-	ctx->lpp->sources.remove(source);
-}
-
-/* ------------------------------------------------------------------------------------------------ source_get_name
- */
-str source_get_name(Source* handle)
-{
-	return handle->name;
-}
-
-/* ------------------------------------------------------------------------------------------------ source_write_cache
- */
-b8 source_write_cache(Source* handle, Bytes slice)
-{
-	return handle->write_cache(slice);
-}
-
-/* ------------------------------------------------------------------------------------------------ source_write_cache
- */
-u64 source_get_cache_len(Source* handle)
-{
-	return handle->cache.len;
-}
-
-/* ------------------------------------------------------------------------------------------------ source_cache_line_offsets
- */
-b8 source_cache_line_offsets(Source* handle)
-{
-	return handle->cache_line_offsets();
-}
-
-/* ------------------------------------------------------------------------------------------------ source_get_str
- */
-str source_get_str(Source* handle, u64 offset, u64 length)
-{
-	return handle->get_str(offset, length);
-}
-
-/* ------------------------------------------------------------------------------------------------ source_get_loc
- */
-Source::Loc source_get_loc(Source* handle, u64 offset)
-{
-	return handle->get_loc(offset);
-}
-
 }
