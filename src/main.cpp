@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 	defer { iro::log.deinit(); };
 
 	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Trace);
+	logger.init("lpp"_str, Logger::Verbosity::Error);
 
 	io::FileDescriptor out;
 	out.open(1);
@@ -36,7 +36,7 @@ int main(int argc, char** argv)
 	iro::log.newDestination("stdout"_str, &out, Log::Dest::Flags::all());
 
 	io::FileDescriptor testlpp;
-	if (!testlpp.open("test.lpp"_str, io::Flag::Readable))
+	if (!testlpp.open("old.lpp"_str, io::Flag::Readable))
 		return 1;
 	defer { testlpp.close(); };
 
@@ -47,7 +47,7 @@ int main(int argc, char** argv)
 	io::Memory mp;
 	mp.open();
 
-	Metaprogram m = lpp.createMetaprogram("test.lpp"_str, &testlpp, &mp);
+	Metaprogram m = lpp.createMetaprogram("old.lpp"_str, &testlpp, &mp);
 	if (!m)
 		return 1;
 

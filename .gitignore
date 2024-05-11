@@ -1,2 +1,6 @@
 temp/
 build/debug
+
+.cache/
+
+.direnv/

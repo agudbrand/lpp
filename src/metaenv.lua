@@ -71,7 +71,7 @@ end
 
 menv.doc = function(start, str)
 	table.insert(menv.data, "")
-	C.metaenvironment_add_document_section(lpp.context, start, make_str(str))
+	C.metaenvironmentAddDocumentSection(lpp.context, start, make_str(str))
 end
 
 menv.val = function(start, x)
@@ -83,7 +83,7 @@ menv.val = function(start, x)
 		error("result of inline lua expression is not convertible to a string", 2)
 	end
 	table.insert(menv.data, "")
-	C.metaenvironment_add_document_section(lpp.context, start, make_str(s))
+	C.metaenvironmentAddDocumentSection(lpp.context, start, make_str(s))
 end
 
 menv.macro = function(start, m, ...)
@@ -96,49 +96,8 @@ menv.macro = function(start, m, ...)
 	-- I'll need to profile this stuff later to see
 	-- if it has horrible effects
 	table.insert(menv.data, function() return m(unpack(args)) end)
-	C.metaenvironment_add_macro_section(lpp.context, start)
+	C.metaenvironmentAddMacroSection(lpp.context, start)
 end
-
-menv.final = function()
-	menv.output = C.source_create(lpp.handle, make_str("output"))
-	menv.cursec.stop = menv.cursec.start + #menv.cursec.buf
-	menv.cursec = menv.sec_list
-	while menv.cursec do
-		local sec = menv.cursec
-		if sec.type == "document" then
-			table.insert(menv.source_map, {C.source_get_cache_len(menv.output), sec.start})
-			local ptr, len = sec.buf:ref()
-			C.source_write_cache(menv.output, Bytes(ptr, len))
-		elseif sec.type =="macro" then
-			local res = sec.macro(unpack(sec.args))
-			if res then
-				table.insert(menv.source_map, {C.source_get_cache_len(menv.output), sec.start})
-				C.source_write_cache(menv.output, Bytes(res, #res))
-			end
-		end
-		menv.cursec = menv.cursec.next
-	end
-
-	local source = C.metaprogram_get_source(lpp.handle)
-	C.source_cache_line_offsets(menv.output)
-
-	for _,v in ipairs(menv.source_map) do
-		local ogloc = C.source_get_loc(source, v[2])
-		local nuloc = C.source_get_loc(menv.output, v[1])
-
-		local f = function(x)
-			return tostring(tonumber(x))
-		end
-
-		io.write(f(ogloc.line), ":", f(ogloc.column), "(", v[2], ") -> ", f(nuloc.line), ":", f(nuloc.column), "(", f(v[1]), ")\n")
-	end
-
-	local len = C.source_get_cache_len(menv.output)
-	local s = C.source_get_str(menv.output, 0, len)
-
-	return ffi.string(s.s, s.len)
-end
-
 
 -- [[
 --    User facing lpp api, accessed via the lpp var anywhere in the metaenvironment
@@ -149,12 +108,12 @@ end
 
 -- returns the indentation preceeding the current token
 lpp.indentation = function()
-	local i = C.get_token_indentation(lpp.handle, macro_token_index)
+	local i = C.getTokenIndentation(lpp.handle, macro_token_index)
 	return ffi.string(i.s, i.len)
 end
 
 lpp.process_file = function(path)
-	local mpb = C.process_file(lpp.context, make_str(path))
+	local mpb = C.processFile(lpp.context, make_str(path))
 
 	if mpb.memhandle == nil then
 		error("",2)
@@ -163,13 +122,13 @@ lpp.process_file = function(path)
 	local result = buffer.new(mpb.memsize)
 	local buf = result:ref()
 
-	C.get_metaprogram_result(mpb, buf)
+	C.getMetaprogramResult(mpb, buf)
 
 	return ffi.string(buf, mpb.memsize)
 end
 
 lpp.source_location = function()
-	local sl = C.get_token_source_location(lpp.handle, macro_token_index)
+	local sl = C.getTokenSourceLocation(lpp.handle, macro_token_index)
 	return ffi.string(sl.streamname.s, sl.streamname.len), sl.line, sl.column
 end
 
@@ -180,31 +139,31 @@ Cursor.__index = Cursor
 
 Cursor.new = function()
 	local o = {}
-	o.handle = C.metaenvironment_new_cursor_after_section(lpp.context)
+	o.handle = C.metaenvironmentNewCursorAfterSection(lpp.context)
 	setmetatable(o, Cursor)
 	ffi.gc(o.handle, function(handle)
-		C.metaenvironment_delete_cursor(lpp.context, handle)
+		C.metaenvironmentDeleteCursor(lpp.context, handle)
 	end)
 	return o
 end
 
 Cursor.codepoint = function(self)
-	return C.metaenvironment_cursor_current_codepoint(lpp.context, self.handle)
+	return C.metaenvironmentCursorCurrentCodepoint(lpp.context, self.handle)
 end
 
 -- Moves the cursor forward by a single character.
 -- This will skip any macros encountered until it reaches 
 -- either the next document section or the end of the current source.
 Cursor.next_char = function(self)
-	return 0 ~= C.metaenvironment_cursor_next_char(lpp.context, self.handle)
+	return 0 ~= C.metaenvironmentCursorNextChar(lpp.context, self.handle)
 end
 
 Cursor.write = function(self, str)
-	return 0 ~= C.metaenvironment_cursor_insert_string(lpp.context, self.handle, make_str(str))
+	return 0 ~= C.metaenvironmentCursorInsertString(lpp.context, self.handle, make_str(str))
 end
 
 Cursor.get_following_string = function(self)
-	local s = C.metaenvironment_cursor_get_rest_of_section(lpp.context, self.handle)
+	local s = C.metaenvironmentCursorGetRestOfSection(lpp.context, self.handle)
 	return ffi.string(s.s, s.len)
 end
 
@@ -214,6 +173,17 @@ end
 
 lpp.get_cursor_after_macro = function()
 	return Cursor.new()
+end
+
+-- API for extending various things in lpp
+lpp.extapi = {}
+
+-- Load an extension from the given path
+
+-- Retrieve the Cursor type. This allows monkeypatching 
+-- the type with extended functionality.
+lpp.extapi.get_cursor_type = function()
+	return Cursor
 end
 
 return M, lpp

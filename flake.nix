@@ -29,7 +29,9 @@
 						gdb
 						bear
 						linuxKernel.packages.linux_zen.perf
+						crystal
 						#glibc_memusage
+						valgrind
 					];
 			};
 		});

@@ -1,18 +1,27 @@
 $$$
 
-local lppclang = require "lppclang"
-lppclang.init(lpp, "lib/liblppclang.so")
+local print_entry = function()
+	local cursor = lpp.get_cursor_after_macro()
+		
+	while cursor:next_char() do
+		local s = cursor:get_following_string()
 
-local ast = lpp.clang.parseString [[
-	int main(
-	{
-
-	}
-]]
-
-print(ast)
+		local type, name = s:match("^([%w_%*]+)%s+([%w_:]+)%(.-%)%s{")
+		if name then
+			print(type, name)
+			while cursor:next_char() do
+				if cursor:codepoint() == string.byte("{") then
+					cursor:write("\n\t"..[[printf("entering ]]..name..[[\n");]].."\n")
+					break
+				end
+			end
+		end
+	end
+end
 
 $$$
+
+@print_entry
 
 #include "metaenvironment.h"
 #include "lpp.h"

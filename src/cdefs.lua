@@ -31,19 +31,19 @@ ffi.cdef
 	} Bytes;
 	
 
-	str get_token_indentation(void* lpp, s32);
+	str getTokenIndentation(void* lpp, s32);
 
 	typedef struct MetaprogramBuffer { void* memhandle; s64 memsize; } MetaprogramBuffer;
-	MetaprogramBuffer process_file(void* ctx, str path);
-	void get_metaprogram_result(MetaprogramBuffer mpbuf, void* outbuf);
+	MetaprogramBuffer processFile(void* ctx, str path);
+	void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf);
 
-	void* metaprogram_get_source(void* ctx);
+	void* metaprogramGetSource(void* ctx);
 
-	s32 advance_at_offset(void* ctx, s32 offset);
-	u32 codepoint_at_offset(void* ctx, s32 offset);
+	s32 advanceAtOffset(void* ctx, s32 offset);
+	u32 codepointAtOffset(void* ctx, s32 offset);
 
-	s64 get_advance(str s);
-	u32 get_codepoint(str s);
+	s64 getAdvance(str s);
+	u32 getCodepoint(str s);
 
 	typedef struct 
 	{
@@ -51,27 +51,27 @@ ffi.cdef
 		u64 column;
 	} SourceLoc;
 
-	void* source_create(void* ctx, str name);
-	str   source_get_name(void* handle);
-	b8    source_write_cache(void* handle, Bytes bytes);
-	u64   source_get_cache_len(void* handle);
-	b8    source_cache_line_offsets(void* handle);
-	str   source_get_str(void* handle, u64 offset, u64 length);
-	SourceLoc source_get_loc(void* handle, u64 offset);
+	void* sourceCreate(void* ctx, str name);
+	str   sourceGetName(void* handle);
+	b8    sourceWriteCache(void* handle, Bytes bytes);
+	u64   sourceGetCacheLen(void* handle);
+	b8    sourceCacheLineOffsets(void* handle);
+	str   sourceGetStr(void* handle, u64 offset, u64 length);
+	SourceLoc sourceGetLoc(void* handle, u64 offset);
 
-	void metaenvironment_add_macro_section(void* handle, u64 start);
-	void metaenvironment_add_document_section(void* handle, u64 start, str s);
+	void metaenvironmentAddMacroSection(void* handle, u64 start);
+	void metaenvironmentAddDocumentSection(void* handle, u64 start, str s);
 
-	void* metaenvironment_new_cursor_after_section(void* ctx);
-	void* metaenvironment_delete_cursor(void* ctx, void* cursor);
+	void* metaenvironmentNewCursorAfterSection(void* ctx);
+	void* metaenvironmentDeleteCursor(void* ctx, void* cursor);
 
-	b8  metaenvironment_cursor_next_char(void* ctx, void* cursor);
-	u32 metaenvironment_cursor_current_codepoint(void* ctx, void* cursor);
+	b8  metaenvironmentCursorNextChar(void* ctx, void* cursor);
+	u32 metaenvironmentCursorCurrentCodepoint(void* ctx, void* cursor);
 
-	SourceLoc metaenvironment_cursor_source_loc(void* ctx, void* cursor);
+	SourceLoc metaenvironmentCursorSourceLoc(void* ctx, void* cursor);
 
-	b8 metaenvironment_cursor_insert_string(void* ctx, void* cursor, str text);
+	b8 metaenvironmentCursorInsertString(void* ctx, void* cursor, str text);
 
-	str metaenvironment_cursor_get_rest_of_section(void* ctx, void* cursor);
+	str metaenvironmentCursorGetRestOfSection(void* ctx, void* cursor);
 ]]
 
