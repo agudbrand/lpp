@@ -21,7 +21,7 @@ void Lexer::advance(s32 n)
     auto readStreamIfNeeded = [this]()
     {
         if (source->cache.atEnd() ||
-            cursor.isempty())
+            cursor.isEmpty())
         {
             u8* ptr = source->cache.reserve(128);
             s64 bytes_read = in->read({ptr, 128});

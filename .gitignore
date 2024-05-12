@@ -4,3 +4,5 @@ build/debug
 .cache/
 
 .direnv/
+
+.envrc

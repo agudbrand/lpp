@@ -6,6 +6,8 @@
 #include "stdarg.h"
 
 #include "io/io.h"
+#include "fs/fs.h"
+#include "scoped.h"
 
 #include "logger.h"
 
@@ -29,16 +31,22 @@ int main(int argc, char** argv)
 	Logger logger;
 	logger.init("lpp"_str, Logger::Verbosity::Error);
 
-	io::FileDescriptor out;
-	out.open(1);
-	defer { out.close(); };
-
-	iro::log.newDestination("stdout"_str, &out, Log::Dest::Flags::all());
-
-	io::FileDescriptor testlpp;
-	if (!testlpp.open("old.lpp"_str, io::Flag::Readable))
+	auto out = scoped(fs::File::fromStdout());
+	if (out == nil)
 		return 1;
-	defer { testlpp.close(); };
+
+	{
+		using enum Log::Dest::Flag;
+		iro::log.newDestination("stdout"_str, &out, 
+			Log::Dest::Flags::from(
+				AllowColor,
+				ShowCategoryName, 
+				ShowVerbosity));
+	}
+
+	auto testlpp = scoped(fs::File::from("old.lpp"_str, fs::OpenFlag::Read));
+	if (testlpp == nil)
+		return 1;
 
 	Lpp lpp = {};
 	if (!lpp.init(logger.verbosity))
@@ -53,14 +61,15 @@ int main(int argc, char** argv)
 
 	out.write({mp.buffer, mp.len});
 
-	io::FileDescriptor outfile;
-	if (!outfile.open("temp/out"_str, io::Flag::Writable, io::FileDescriptor::Flag::Create))
+	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlags::from(fs::OpenFlag::Write, fs::OpenFlag::Create));
+	if (outfile == nil)
 		return 1;
+
+	io::formatv(&outfile, "test\n");
 
 	if (!lpp.runMetaprogram(m, &mp, &outfile))
 		return 1;
 
-	outfile.close();
 	lpp.deinit();
 
 	return 0;

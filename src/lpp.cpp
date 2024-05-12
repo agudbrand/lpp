@@ -1,6 +1,7 @@
 #include "lpp.h"
 #include "logger.h"
 #include "assert.h"
+#include "fs/fs.h"
 
 #include "metaenvironment.h"
 
@@ -282,8 +283,8 @@ MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 {
 	Lpp* lpp = ctx->lpp;
 
-	io::FileDescriptor f;
-	if (!f.open(path, io::Flag::Readable))
+	auto f = scoped(fs::File::from(path, fs::OpenFlag::Read));
+	if (f == nil)
 		return {};
 
 	io::Memory mp;

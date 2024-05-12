@@ -11,12 +11,12 @@ files.c = lake.find("src/*.cpp")
 
 -- TODO(sushi) implement lake's glob manually so we can support recursive globbing eg. **/*.cpp
 --             cause this kinda fucking stinks
-lake.concat(files.c, lake.find("src/json/*.cpp"))
 lake.concat(files.c, lake.find("src/iro/src/*.cpp"))
 lake.concat(files.c, lake.find("src/iro/src/containers/*.cpp"))
 lake.concat(files.c, lake.find("src/iro/src/io/*.cpp"))
 lake.concat(files.c, lake.find("src/iro/src/json/*.cpp"))
 lake.concat(files.c, lake.find("src/iro/src/memory/*.cpp"))
+lake.concat(files.c, lake.find("src/iro/src/fs/*.cpp"))
 
 files.o = lake.replace(files.c, "(src/.-)%.cpp", build_dir.."%1.o")
 files.d = lake.replace(files.o, "(.-)%.o", "%1.d")

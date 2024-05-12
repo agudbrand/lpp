@@ -57,7 +57,6 @@ private:
 	// loads a new metaenv from the cached chunk and leaves it at the top of 
 	// the lua stack
 	b8 loadMetaenvironment();
-
 }; 
 
 #endif // _lpp_lpp_h
