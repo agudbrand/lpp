@@ -1,7 +1,9 @@
 #include "lpp.h"
-#include "logger.h"
+
+#include "iro/logger.h"
+#include "iro/fs/fs.h"
+
 #include "assert.h"
-#include "fs/fs.h"
 
 #include "metaenvironment.h"
 

@@ -8,10 +8,10 @@
 #ifndef _lpp_source_h
 #define _lpp_source_h
 
-#include "common.h"
-#include "unicode.h"
-#include "containers/array.h"
-#include "io/io.h"
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/array.h"
+#include "iro/io/io.h"
 
 using namespace iro;
 

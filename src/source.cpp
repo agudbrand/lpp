@@ -1,6 +1,8 @@
 #include "source.h"
-#include "unicode.h"
+
 #include "lpp.h"
+
+#include "iro/unicode.h"
 
 /* ------------------------------------------------------------------------------------------------ Source::init
  */

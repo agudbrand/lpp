@@ -13,10 +13,11 @@
 #ifndef _lpp_lpp_h
 #define _lpp_lpp_h
 
-#include "common.h"
+#include "iro/common.h"
+#include "iro/containers/pool.h"
+
 #include "source.h"
 #include "parser.h"
-#include "containers/pool.h"
 #include "luastate.h"
 
 using namespace iro;

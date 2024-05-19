@@ -6,9 +6,9 @@
 #ifndef _lpp_metaenvironment_h
 #define _lpp_metaenvironment_h
 
-#include "common.h"
-#include "containers/array.h"
-#include "containers/pool.h"
+#include "iro/common.h"
+#include "iro/containers/array.h"
+#include "iro/containers/pool.h"
 
 #include "source.h"
 

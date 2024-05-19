@@ -1,8 +1,8 @@
 #include "uri.h"
+
+#include "iro/logger.h"
+
 #include "assert.h"
-
-#include "logger.h"
-
 #include "ctype.h"
 
 Logger logger = Logger::create("uri"_str, Logger::Verbosity::Warn);

@@ -7,8 +7,8 @@
 #ifndef _lpp_luastate_h
 #define _lpp_luastate_h
 
-#include "common.h"
-#include "logger.h"
+#include "iro/common.h"
+#include "iro/logger.h"
 
 using namespace iro;
 

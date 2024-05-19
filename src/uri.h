@@ -7,8 +7,8 @@
 #ifndef _lpp_uri_h
 #define _lpp_uri_h
 
-#include "common.h"
-#include "io/io.h"
+#include "iro/common.h"
+#include "iro/io/io.h"
 
 using namespace iro;
 

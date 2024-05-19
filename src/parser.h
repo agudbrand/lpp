@@ -5,7 +5,8 @@
 #ifndef _lpp_parser_h
 #define _lpp_parser_h
 
-#include "common.h"
+#include "iro/common.h"
+
 #include "lex.h"
 #include "csetjmp"
 

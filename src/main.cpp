@@ -1,15 +1,17 @@
-#include "common.h"
+#include "iro/common.h"
 
 #include "lpp.h"
 
 #include "stdlib.h"
 #include "stdarg.h"
 
-#include "io/io.h"
-#include "fs/fs.h"
-#include "scoped.h"
+#include "iro/io/io.h"
+#include "iro/fs/fs.h"
+#include "iro/traits/scoped.h"
 
-#include "logger.h"
+#include "iro/logger.h"
+
+#include "iro/process.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
@@ -28,12 +30,34 @@ int main(int argc, char** argv)
 	iro::log.init();
 	defer { iro::log.deinit(); };
 
-	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Error);
-
-	auto out = scoped(fs::File::fromStdout());
+	auto out = scoped(fs::File::stdout());
 	if (out == nil)
 		return 1;
+
+	str args[] = { "google.com"_str };
+
+	fs::File curlout;
+	Process::Stream streams[3] = {{}, {true, &curlout}, {}};
+
+	auto proc = Process::spawn("curl"_str, {args, 1}, streams);
+
+	for (;;)
+	{
+		u8 buffer[128];
+		u64 len = curlout.read({buffer, 128});
+		if (len)
+			io::format(&out, str::from(buffer, len));
+		proc.checkStatus();
+		if (proc.terminated)
+		{
+			io::formatv(&out, "curl terminated with exit code ", proc.exit_code, "\n");
+			break;
+		}
+	}
+	
+
+	Logger logger;
+	logger.init("lpp"_str, Logger::Verbosity::Error);
 
 	{
 		using enum Log::Dest::Flag;
@@ -61,7 +85,7 @@ int main(int argc, char** argv)
 
 	out.write({mp.buffer, mp.len});
 
-	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlags::from(fs::OpenFlag::Write, fs::OpenFlag::Create));
+	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create);
 	if (outfile == nil)
 		return 1;
 

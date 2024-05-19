@@ -32,6 +32,8 @@
 						crystal
 						#glibc_memusage
 						valgrind
+						explain
+						acl
 					];
 			};
 		});

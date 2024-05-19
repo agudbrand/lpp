@@ -5,10 +5,10 @@
 #ifndef _lpp_lex_h
 #define _lpp_lex_h
 
-#include "common.h"
+#include "iro/common.h"
+#include "iro/containers/array.h"
+#include "iro/logger.h"
 
-#include "containers/array.h"
-#include "logger.h"
 #include "source.h"
 
 #include "csetjmp"

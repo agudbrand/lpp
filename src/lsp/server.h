@@ -6,8 +6,8 @@
 #ifndef _lpp_lsp_server_h
 #define _lpp_lsp_server_h
 
-#include "common.h"
-#include "unicode.h"
+#include "iro/common.h"
+#include "iro/unicode.h"
 
 #include "lpp.h"
 

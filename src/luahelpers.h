@@ -1,7 +1,7 @@
 #ifndef _lpp_luahelpers_h
 #define _lpp_luahelpers_h
 
-#include "common.h"
+#include "iro/common.h"
 
 extern "C"
 {

@@ -3,21 +3,13 @@ verbose ?= false
 
 build_dir = "build/"..mode.."/"
 
+lake.maxjobs(8)
+
 lpp := lake.target(build_dir.."lpp")
 
 files := {}
 
-files.c = lake.find("src/*.cpp")
-
--- TODO(sushi) implement lake's glob manually so we can support recursive globbing eg. **/*.cpp
---             cause this kinda fucking stinks
-lake.concat(files.c, lake.find("src/iro/src/*.cpp"))
-lake.concat(files.c, lake.find("src/iro/src/containers/*.cpp"))
-lake.concat(files.c, lake.find("src/iro/src/io/*.cpp"))
-lake.concat(files.c, lake.find("src/iro/src/json/*.cpp"))
-lake.concat(files.c, lake.find("src/iro/src/memory/*.cpp"))
-lake.concat(files.c, lake.find("src/iro/src/fs/*.cpp"))
-
+files.c = lake.find("src/**/*.cpp")
 files.o = lake.replace(files.c, "(src/.-)%.cpp", build_dir.."%1.o")
 files.d = lake.replace(files.o, "(.-)%.o", "%1.d")
 
@@ -35,7 +27,7 @@ $[
 	-std=c++20
 	-Iinclude
 	-Isrc
-	-Isrc/iro/src
+	-Isrc/iro
 	-Wno-switch
 	-fcolor-diagnostics
 	-fno-caret-diagnostics
@@ -58,6 +50,7 @@ $[
 	
 	-Llib
 	-lluajit
+	-lexplain
 	-Wl,--export-dynamic
 ]
 
@@ -84,12 +77,12 @@ linker_recipe := function(input, output)
         result := ` $(linker) $(input) $(linker_flags) -o $(output) `
         time_took := (lake.get_highres_clock() - start) / 1000000
 
-        if result.exit_status == 0 then
+        if result.exit_code == 0 then
             io.write(blue, tostring(output), reset, " ", time_took, "s\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
         else
             io.write(red, "compiling ", blue, tostring(output), red, " failed", reset, ":\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
 			error(red.."linker failed"..reset)
         end
     end
@@ -104,12 +97,12 @@ compiler_recipe := function(input, output)
         result := ` $(compiler) -c $(compiler_flags) $(input) -o $(output) `
         time_took := (lake.get_highres_clock() - start) / 1000000
 
-        if result.exit_status == 0 then
+        if result.exit_code == 0 then
             io.write(green, input, reset, " -> ", blue, output, reset, " ", time_took, "s\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
         else
             io.write(red, "compiling ", blue, output, red, " failed", reset, ":\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
 			-- error(red.."compiler failed"..reset)
         end
     end
@@ -131,17 +124,13 @@ for c_file, d_file in lake.zip(files.c, files.d) do
             dir := tostring(d_file):match("(.*)/")
             lake.mkdir(dir, {make_parents = true})
 
-			-- cflags_str := os.getenv("NIX_CFLAGS_COMPILE")
-			-- cflags := {}
-			-- for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
+			result := ` clang++ $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
 
-			result := ` clang++ -v $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
-
-			if result.exit_status ~= 0 then
+			if result.exit_code ~= 0 then
 				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
 			end
 
-			result = lake.replace(result.stderr, "\\\n", "")
+			result = lake.replace(result.stdout, "\\\n", "")
 			
 			out := ""
 
@@ -191,7 +180,7 @@ script_target := function(scriptname, outname)
 		:depends_on(spath)
 		:recipe(function()
 			result := ` luajit $(spath) `
-			if result.exit_status == 0 then
+			if result.exit_code == 0 then
 				io.write(green, spath, reset, " -> ", blue, opath, reset, "\n", result.stdout, "\n")
 			else
 				io.write(red, "failed to run script ", blue, spath, reset, ": \n", result.stdout, "\n")

@@ -1,5 +1,6 @@
 #include "lex.h"
-#include "logger.h"
+
+#include "iro/logger.h"
 
 #include "ctype.h"
 #include "assert.h"
@@ -11,7 +12,7 @@ u32 Lexer::current()    { return cursor_codepoint; }
 u8* Lexer::currentptr() { return cursor.bytes - cursor_codepoint.advance; }
 
 b8 Lexer::at(u8 c) { return current() == c; }
-b8 Lexer::eof()    { return at(0) || !cursor_codepoint.isValid(); }
+b8 Lexer::eof()    { return at(0) || isnil(cursor_codepoint); }
 
 b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
 b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
@@ -23,17 +24,16 @@ void Lexer::advance(s32 n)
         if (source->cache.atEnd() ||
             cursor.isEmpty())
         {
-            u8* ptr = source->cache.reserve(128);
-            s64 bytes_read = in->read({ptr, 128});
+        	Bytes bytes = source->cache.reserve(128);
+            s64 bytes_read = in->read(bytes);
             if (!bytes_read)
             {
-                cursor_codepoint = utf8::Codepoint::invalid();
+                cursor_codepoint = nil;
                 errorHere("failed to read more bytes from input stream");
 				longjmp(err_handler, 0);
             }
             source->cache.commit(bytes_read);
-            cursor.bytes = ptr;
-            cursor.len = 128;
+			cursor = str::from(bytes.ptr, bytes_read);
         }
     };
 
