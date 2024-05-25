@@ -30,6 +30,31 @@ int main(int argc, char** argv)
 	iro::log.init();
 	defer { iro::log.deinit(); };
 
+	auto out = scoped(fs::File::stdout());
+	if (isnil(out))
+		return 1;
+
+	str args[] = { "google.com"_str };
+
+	fs::File curlout;
+	Process::Stream streams[3] = {{}, {true, &curlout}, {}};
+
+	auto proc = Process::spawn("curl"_str, {args, 1}, streams);
+
+	for (;;)
+	{
+		u8 buffer[128];
+		u64 len = curlout.read({buffer, 128});
+		if (len)
+			io::format(&out, str::from(buffer, len));
+		proc.checkStatus();
+		if (proc.terminated)
+		{
+			io::formatv(&out, "curl terminated with exit code ", proc.exit_code, "\n");
+			break;
+		}
+	}
+
 	Logger logger;
 	logger.init("lpp"_str, Logger::Verbosity::Trace);
 
