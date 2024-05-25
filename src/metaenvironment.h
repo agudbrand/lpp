@@ -9,6 +9,7 @@
 #include "iro/common.h"
 #include "iro/containers/array.h"
 #include "iro/containers/pool.h"
+#include "iro/containers/list.h"
 
 #include "source.h"
 
@@ -17,56 +18,77 @@ struct Lpp;
 
 using namespace iro;
 
+struct Section;
+struct Cursor;
+
+/* ================================================================================================ Section
+ */
+typedef Pool<Section> SectionPool;
+typedef DList<Section> SectionList;
+typedef SectionList::Node SectionNode;
+
+struct Section
+{
+	enum class Kind : u8
+	{
+		Invalid,
+		Document,
+		Macro,
+	};
+
+	Kind kind = Kind::Invalid;
+
+	u64 start_offset = -1;
+
+	io::Memory mem = {};
+
+	SectionNode* node = nullptr;
+
+	u64 macro_idx = -1;
+
+
+	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+	=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+
+
+	b8 initDocument(u64 start_offset, str raw, SectionNode* node);
+	b8 initMacro(u64 start_offset, u64 macro_idx, SectionNode* node);
+	void deinit();
+
+	b8 insertString(u64 start, str s);
+};
+
+/* ================================================================================================ Cursor
+ */
+typedef Pool<Cursor> CursorPool;
+
+struct Cursor
+{
+	SectionNode* creator = nullptr;
+	SectionNode* section = nullptr;
+
+	// the codepoint at the beginning of 'range'
+	utf8::Codepoint current_codepoint;
+	str range;
+
+	u64 offset; // into current section
+};
+
 /* ================================================================================================ Metaenvironment
  */
 struct Metaenvironment
 {
-    /* ============================================================================================ Metaenvironment::Section
-     */
-	struct Section
-	{
-		enum class Kind : u32
-		{
-			Document,
-			Macro,
-		};
-		
-		u64 start_offset = -1;
-		Kind kind = Kind::Document;
+	SectionPool sections;
+	SectionList section_list;
 
-		io::Memory mem = {};
-		str range = {};
-	};
-
-	Array<Section> sections;
-	
-    /* ============================================================================================ Metaenvironment::ExpansionMap
-     */
-	struct ExpansionMap
-	{
-		u64 old_offset;
-		u64 new_offset;
-	};
-
-    /* ============================================================================================ Metaenvironment::Cursor
-     */
-	struct Cursor
-	{
-		u32 section_idx;
-		str range;
-		utf8::Codepoint current_codepoint;
-	};
-
-	Pool<Cursor> cursors;
-
-	Array<ExpansionMap> expansions;
+	CursorPool  cursors;
 
 	Source* input;
 	Source* output;
 
 	Lpp* lpp;
 
-	u64 section_idx;
+	SectionNode* current_section;
 
 
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -79,7 +101,7 @@ struct Metaenvironment
 	Section* insertSection(u64 idx);
 
 	void addDocumentSection(u64 start, str s);
-	void addMacroSection(s64 start);
+	void addMacroSection(s64 start, u64 macro_idx);
 
 	b8 processSections();
 };
@@ -87,25 +109,28 @@ struct Metaenvironment
 extern "C"
 {
 
-void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start);
+void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start, u64 macro_idx);
 void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
 
-Metaenvironment::Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
-void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
+void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor);
 
-b8  metaenvironmentCursorNextChar(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
-u32 metaenvironmentCursorCurrentCodepoint(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+b8  cursorNextChar(Cursor* cursor);
+b8  cursorNextSection(Cursor* cursor);
+u32 cursorCurrentCodepoint(Cursor* cursor);
+b8  cursorInsertString(Cursor* cursor, str text);
+str cursorGetRestOfSection(Cursor* cursor);
+SectionNode* cursorGetSection(Cursor* cursor);
 
-struct SourceLoc
-{
-	u64 line;
-	u64 column;
-};
+SectionNode* metaenvironmentGetNextSection(MetaprogramContext* ctx);
 
-// TODO(sushi) this might not make sense?
-SourceLoc metaenvironmentCursorSourceLoc(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor);
+SectionNode* sectionNext(SectionNode* section);
+SectionNode* sectionPrev(SectionNode* section);
 
-b8 metaenvironmentCursorInsertString(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor, str text);
+b8 sectionIsMacro(SectionNode* section);
+b8 sectionIsDocument(SectionNode* section);
+
+b8 sectionInsertString(SectionNode* section, u64 offset, str s);
 
 }
 

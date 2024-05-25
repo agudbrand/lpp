@@ -3,6 +3,62 @@
 
 static Logger logger = Logger::create("metaenv"_str, Logger::Verbosity::Trace);
 
+/* ------------------------------------------------------------------------------------------------ Section::initDocument
+ */
+b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
+{
+	node = node_;
+	start_offset = start_offset_;
+	if (!mem.open(raw.len))
+		return false;
+	mem.write(raw);
+	kind = Kind::Document;
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ Section::initDocument
+ */
+b8 Section::initMacro(u64 start_offset_, u64 macro_idx_, SectionNode* node_)
+{
+	start_offset = start_offset_;
+	node = node_;
+	macro_idx = macro_idx_;
+	kind = Kind::Macro;
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ Section::deinit
+ */
+void Section::deinit()
+{
+	switch (kind)
+	{
+	case Kind::Invalid:
+		return;
+
+	case Kind::Document:
+		mem.close();
+		break;
+	}
+
+	node = nullptr;
+}
+
+/* ------------------------------------------------------------------------------------------------ Section::insertString
+ */
+b8 Section::insertString(u64 offset, str s)
+{
+	assert(offset <= mem.len);
+
+	mem.reserve(s.len);
+	mem.commit(s.len);
+
+	mem::move(mem.buffer + offset + s.len, mem.buffer + offset, s.len);
+	mem::copy(mem.buffer + offset, s.bytes, s.len);
+
+	return true;
+}
+
 /* ------------------------------------------------------------------------------------------------ Metaenvironment::init
  */
 b8 Metaenvironment::init(Lpp* lpp, Source* input, Source* output)
@@ -10,9 +66,9 @@ b8 Metaenvironment::init(Lpp* lpp, Source* input, Source* output)
 	this->lpp = lpp;
 	this->input = input;
 	this->output = output;
-	sections = Array<Section>::create();
-	expansions = Array<ExpansionMap>::create();
-	cursors = Pool<Cursor>::create();
+	sections = SectionPool::create();
+	section_list = SectionList::create();
+	cursors = CursorPool::create();
 	return true;
 }
 
@@ -21,7 +77,6 @@ b8 Metaenvironment::init(Lpp* lpp, Source* input, Source* output)
 void Metaenvironment::deinit()
 {
 	sections.destroy();
-	expansions.destroy();
 	cursors.destroy();
 	*this = {};
 }
@@ -30,21 +85,16 @@ void Metaenvironment::deinit()
  */
 void Metaenvironment::addDocumentSection(u64 start, str raw)
 {
-	Section* s = sections.push();
-	s->kind = Section::Kind::Document;
-	s->start_offset = start;
-	s->mem.open(raw.len);
-	s->mem.write(raw);
-	s->range = s->mem.asStr();
+	Section* s = sections.add();
+	s->initDocument(start, raw, section_list.pushTail(s));
 }
 
 /* ------------------------------------------------------------------------------------------------ Metaenvironment::addMacroSection
  */
-void Metaenvironment::addMacroSection(s64 start)
+void Metaenvironment::addMacroSection(s64 start, u64 macro_idx)
 {
-	Section* s = sections.push();
-	s->kind = Section::Kind::Macro;
-	s->start_offset = start;
+	Section* s = sections.add();
+	s->initMacro(start, macro_idx, section_list.pushTail(s));
 }
 
 /* ------------------------------------------------------------------------------------------------ Metaenvironment::processSections
@@ -54,57 +104,50 @@ b8 Metaenvironment::processSections()
 {
 	using enum Section::Kind;
 
+	TRACE("Metaenvironment::processSections()\n");
 	SCOPED_INDENT;
 
 	LuaState* lua = &lpp->lua;
 	
-	lua->pushString("data"_str);
+	lua->pushString("macro_table"_str);
 	lua->getTable(lua->getTop()-1);
 	defer { lua->pop(); };
 
-	for (s32 i = 0; i < sections.len(); i++)
+	u64 section_idx = 0;
+	for (current_section = section_list.head; 
+		 current_section; 
+		 current_section = current_section->next, section_idx += 1)
 	{
-		section_idx = i;
-		Section* current_section = &sections[i];
-
-		lua->pushInteger(i+1);
-		lua->getTable(-2);
-
-		// lua->stack_dump(1);
-
-		ExpansionMap* map = expansions.push();
-		map->old_offset = current_section->start_offset;
-		map->new_offset = output->cache.len;
-
-		switch (current_section->kind)
+		Section* s = current_section->data;
+		switch (s->kind)
 		{
 		case Macro:
+			lua->pushInteger(s->macro_idx);
+			lua->getTable(-2);
 			if (lua->pcall(0, 1))
-			{
-				str res = lua->toString(-1);
-				output->writeCache(res);
-			}
-			else
+				output->writeCache(lua->toString(-1));
+			else 
 				return false;
+			lua->pop();
 			break;
 
 		case Document:
-			output->writeCache(current_section->range);
+			output->writeCache(s->mem.asStr());
 			break;
 		}
-		
-		lua->pop();
+
 	}
 
 	output->cacheLineOffsets();
 
+#if 0
 	for (ExpansionMap& m : expansions)
 	{
 		Source::Loc old = input->getLoc(m.old_offset);
 		Source::Loc nu  = output->getLoc(m.new_offset);
 		INFO(old.line, ":", old.column, "(", m.old_offset, ") -> ", nu.line, ":", nu.column, "(", m.new_offset, ")\n");
 	}
-
+#endif
 
 	return true;
 }
@@ -114,9 +157,9 @@ extern "C"
 
 /* ------------------------------------------------------------------------------------------------ metaenvironmentAddMacroSection
  */
-void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start)
+void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start, u64 macro_idx)
 {
-	ctx->metaenv->addMacroSection(start);
+	ctx->metaenv->addMacroSection(start, macro_idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ metaenvironmentAddDocumentSection
@@ -126,120 +169,135 @@ void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str r
 	ctx->metaenv->addDocumentSection(start, raw);
 }
 
-static Metaenvironment::Section* findNextDocumentSection(Metaenvironment* me, u64* idx)
-{
-	if (*idx >= me->sections.len())
-		return nullptr;
-
-	Metaenvironment::Section* s = &me->sections[*idx];
-	for (;;)
-	{
-		if (s->kind == Metaenvironment::Section::Kind::Document)
-			break;
-		*idx += 1;
-		if (*idx >= me->sections.len())
-			return nullptr;
-		s = &me->sections[*idx];
-	}
-
-	return s;
-}
-
 /* ------------------------------------------------------------------------------------------------ metaenvironmentNewCursorAfterSection
  */
-Metaenvironment::Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx)
+Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx)
 {
 	Metaenvironment* me = ctx->metaenv;
 
-	if (me->section_idx == me->sections.len() - 1)
-	{
-		return nullptr;
-	}
-
-	u64 place_idx = me->section_idx + 1;
-	Metaenvironment::Section* s = findNextDocumentSection(me, &place_idx);
-	if (!s)
+	if (!me->current_section->next)
 		return nullptr;
 
-	Metaenvironment::Cursor* cursor = me->cursors.add();
-	cursor->section_idx = place_idx;
-	cursor->range = s->range;
-	cursor->current_codepoint = cursor->range.advance();
+	Cursor* cursor = me->cursors.add();
+	cursor->creator = me->current_section->next;
+	cursor->section = cursor->creator;
+	cursor->range = cursor->section->data->mem.asStr();
+	cursor->current_codepoint = utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
 	return cursor;
 }
 
 /* ------------------------------------------------------------------------------------------------ metaenvironmentDeleteCursor
  */
-void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor)
+void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor)
 {
 	ctx->metaenv->cursors.remove(cursor);
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironmentCursorNextChar
+/* ------------------------------------------------------------------------------------------------ cursorNextChar
  */
-b8 metaenvironmentCursorNextChar(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor)
+b8 cursorNextChar(Cursor* cursor)
 {
-	Metaenvironment* me = ctx->metaenv;
-	if (cursor->range.len == 0)
-	{
-		u64 new_idx = cursor->section_idx + 1;
-		Metaenvironment::Section* s = findNextDocumentSection(me, &new_idx);
-		if (!s)
-			return false;
-		cursor->section_idx = new_idx;
-		cursor->range = s->range;
-		cursor->current_codepoint = cursor->range.advance();
-		return true;
-	}
+	Section* s = cursor->section->data;
 
-	cursor->current_codepoint = cursor->range.advance();
+	if (s->kind == Section::Kind::Macro)
+		return false;
+
+	if (cursor->range.len == 0)
+		return false;
+
+	cursor->range.increment(cursor->current_codepoint.advance);
+	if (cursor->range.len == 0)
+		return false;
+
+	cursor->current_codepoint = utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironmentCursorCurrentCodepoint
+/* ------------------------------------------------------------------------------------------------ cursorCurrentCodepoint
  */
-u32  metaenvironmentCursorCurrentCodepoint(MetaprogramContext* ctx, Metaenvironment::Cursor* cursor)
+u32  cursorCurrentCodepoint(Cursor* cursor)
 {
 	return cursor->current_codepoint.codepoint;
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironmentCursorCurrentCodepoint
+/* ------------------------------------------------------------------------------------------------ cursorInsertString
  */
-b8 metaenvironmentCursorInsertString(
-		MetaprogramContext* ctx, 
-		Metaenvironment::Cursor* cursor, 
-		str text)
+b8 cursorInsertString(Cursor* cursor, str text)
 {
-	// this is horrible and should definitely be cleaned up later 
-	Metaenvironment* me = ctx->metaenv;
-	me->sections.insert(cursor->section_idx+1);
-	me->sections.insert(cursor->section_idx+1);
-	Metaenvironment::Section* exp  = &me->sections[cursor->section_idx+1];
-	Metaenvironment::Section* post = &me->sections[cursor->section_idx+2];
-	Metaenvironment::Section* pre  = &me->sections[cursor->section_idx];
-	post->mem.open(cursor->range.len);
-	exp->mem.open(text.len);
-	post->mem.write(cursor->range);
-	pre->mem.len = cursor->range.bytes - pre->mem.buffer;
-	exp->mem.write(text);
-	exp->start_offset = pre->mem.len + pre->start_offset;
-	exp->range = exp->mem.asStr();
-	post->range = post->mem.asStr();
-	post->start_offset = exp->mem.len + exp->start_offset;
-	pre->range = pre->mem.asStr();
-	cursor->range = exp->range;
-	cursor->section_idx += 1;
-	cursor->current_codepoint = cursor->range.advance();
+	Section* s = cursor->section->data;
+	if (s->kind != Section::Kind::Document)
+		return false;
+	
+	assert(cursor->range.bytes >= s->mem.buffer);
+
+	u64 cursor_offset = cursor->range.bytes - s->mem.buffer;
+
+	if (!s->insertString(cursor_offset, text))
+		return false;
+
+	u8* new_pos = s->mem.buffer + cursor_offset + text.len;
+	u64 new_len = (s->mem.buffer + s->mem.len) - new_pos;
+	cursor->range = {new_pos, new_len};
+
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironmentCursorGetRestOfSection
+/* ------------------------------------------------------------------------------------------------ cursorGetRestOfSection
  */
-str metaenvironmentCursorGetRestOfSection(
-		MetaprogramContext* ctx, 
-		Metaenvironment::Cursor* cursor)
+str cursorGetRestOfSection(Cursor* cursor)
 {
+	assert(sectionIsDocument(cursorGetSection(cursor)));
 	return cursor->range;
+}
+
+/* ------------------------------------------------------------------------------------------------ cursorGetSection
+ */
+SectionNode* cursorGetSection(Cursor* cursor)
+{
+	return cursor->section;
+}
+
+/* ------------------------------------------------------------------------------------------------ metaenvironmentGetNextSection
+ */
+SectionNode* metaenvironmentGetNextSection(MetaprogramContext* ctx)
+{
+	return ctx->metaenv->current_section->next;
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionNext
+ */
+SectionNode* sectionNext(SectionNode* section)
+{
+	return section->next;
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionPrev
+ */
+SectionNode* sectionPrev(SectionNode* section)
+{
+	return section->prev;
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionIsMacro
+ */
+b8 sectionIsMacro(SectionNode* section)
+{
+	return section->data->kind == Section::Kind::Macro;
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionIsDocument
+ */
+b8 sectionIsDocument(SectionNode* section)
+{
+	return section->data->kind == Section::Kind::Document;
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionInsertString
+ */
+b8 sectionInsertString(SectionNode* section, u64 offset, str s)
+{
+	assert(sectionIsDocument(section));
+	return section->data->insertString(offset, s);
 }
 
 }

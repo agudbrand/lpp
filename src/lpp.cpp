@@ -14,8 +14,6 @@ extern "C"
 
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
-
-
 /* ------------------------------------------------------------------------------------------------ Lpp::init
  */
 b8 Lpp::init(Logger::Verbosity verbosity)
@@ -286,7 +284,7 @@ MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 	Lpp* lpp = ctx->lpp;
 
 	auto f = scoped(fs::File::from(path, fs::OpenFlag::Read));
-	if (f == nil)
+	if (isnil(f))
 		return {};
 
 	io::Memory mp;

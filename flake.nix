@@ -34,6 +34,7 @@
 						valgrind
 						explain
 						acl
+						rr
 					];
 			};
 		});

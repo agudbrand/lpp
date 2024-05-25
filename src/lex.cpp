@@ -24,27 +24,34 @@ void Lexer::advance(s32 n)
         if (source->cache.atEnd() ||
             cursor.isEmpty())
         {
-        	Bytes bytes = source->cache.reserve(128);
-            s64 bytes_read = in->read(bytes);
-            if (!bytes_read)
+        	Bytes reserved = source->cache.reserve(128);
+            s64 bytes_read = in->read(reserved);
+			if (bytes_read == -1)
             {
                 cursor_codepoint = nil;
                 errorHere("failed to read more bytes from input stream");
 				longjmp(err_handler, 0);
             }
+			else if (bytes_read == 0)
+			{
+				cursor_codepoint.codepoint = 0;
+				cursor_codepoint.advance = 1;
+				return;
+			}
             source->cache.commit(bytes_read);
-			cursor = str::from(bytes.ptr, bytes_read);
+			cursor = str::from(reserved.ptr, bytes_read);
         }
     };
-
-    readStreamIfNeeded();
 
 	for (s32 i = 0; i < n; i++)
 	{
         readStreamIfNeeded();
+		if (cursor_codepoint.codepoint == 0)
+			return;
+
         cursor_codepoint = cursor.advance();
 
-        if (!cursor_codepoint)
+        if (isnil(cursor_codepoint))
         {
             errorHere("encountered invalid codepoint!");
             longjmp(err_handler, 0);
@@ -120,8 +127,7 @@ b8 Lexer::run()
 		if (eof())
 		{
 			initCurt();
-			advance();
-			finishCurt(Eof);
+			finishCurt(Eof, 1);
 			return true;
 		}
 
@@ -306,11 +312,11 @@ void Lexer::initCurt()
  */
 void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 {
-	s32 len = (currentptr() - source->cache.buffer) - curt.source_location;
-	if (len != 0)
+	s32 len = len_offset + (currentptr() - source->cache.buffer) - curt.source_location;
+	if (len > 0)
 	{
 		curt.kind = kind;
-		curt.length = len + len_offset;
+		curt.length = len;
 		tokens.push(curt);
 	}
 }

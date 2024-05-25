@@ -108,7 +108,6 @@ AST.new = function(ctx)
 	return o
 end
 
-
 AST.getTranslationUnitDecl = function(self) 
 	local tu = lppclang.getTranslationUnitDecl(self.ctx)
 	return Decl.new(self, tu)
@@ -128,12 +127,12 @@ Decl.new = function(ast, d)
 end
 
 Decl.getDeclIter = function(self)
-	local iter = lppclang.createDeclIter(self.ast.ctx, self.d)
+	local iter = lppclang.createDeclIter(self.ast.ctx, self.decl)
 	if iter == nil then
 		return false
 	end
 
-	return DeclIter.new(iter)
+	return DeclIter.new(self.ast, iter)
 end
 
 Decl.name = function(self)
@@ -152,10 +151,30 @@ Decl.asFunction = function(self)
 	end
 end
 
+DeclIter = {}
+DeclIter.__index = DeclIter
+
+DeclIter.new = function(ast, iter)
+	assert(iter, "DeclIter.new called without a decl iter pointer")
+
+	local o = {}
+	setmetatable(o, DeclIter)
+	o.ast = ast
+	o.iter = iter
+	return o
+end
+
+DeclIter.next = function(self)
+	local nd = lppclang.getNextDecl(self.iter)
+	if nd == nil then
+		return nil
+	end
+	return Decl.new(self.ast, nd)
+end
 
 clang.parseString = function(str)
 	local ctx = lppclang.createContext()
-	
+
 	if ctx == nil then
 		error("failed to create lppclang context", 2)
 	end
@@ -168,7 +187,7 @@ clang.parseString = function(str)
 		error("failed to create AST from string", 2)
 	end
 
-	return ctx
+	return AST.new(ctx)
 end
 
 

@@ -30,71 +30,45 @@ int main(int argc, char** argv)
 	iro::log.init();
 	defer { iro::log.deinit(); };
 
-	auto out = scoped(fs::File::stdout());
-	if (out == nil)
-		return 1;
-
-	str args[] = { "google.com"_str };
-
-	fs::File curlout;
-	Process::Stream streams[3] = {{}, {true, &curlout}, {}};
-
-	auto proc = Process::spawn("curl"_str, {args, 1}, streams);
-
-	for (;;)
-	{
-		u8 buffer[128];
-		u64 len = curlout.read({buffer, 128});
-		if (len)
-			io::format(&out, str::from(buffer, len));
-		proc.checkStatus();
-		if (proc.terminated)
-		{
-			io::formatv(&out, "curl terminated with exit code ", proc.exit_code, "\n");
-			break;
-		}
-	}
-	
-
 	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Error);
+	logger.init("lpp"_str, Logger::Verbosity::Trace);
 
 	{
 		using enum Log::Dest::Flag;
-		iro::log.newDestination("stdout"_str, &out, 
-			Log::Dest::Flags::from(
-				AllowColor,
-				ShowCategoryName, 
-				ShowVerbosity));
+		iro::log.newDestination("stdout"_str, &fs::stdout, 
+				AllowColor |
+				ShowCategoryName |
+				ShowVerbosity |
+				TrackLongestName |
+				PadVerbosity);
 	}
 
-	auto testlpp = scoped(fs::File::from("old.lpp"_str, fs::OpenFlag::Read));
-	if (testlpp == nil)
+	auto testlpp = scoped(fs::File::from("tests/lppclang.lpp"_str, fs::OpenFlag::Read));
+	if (isnil(testlpp))
 		return 1;
 
 	Lpp lpp = {};
 	if (!lpp.init(logger.verbosity))
 		return 1;
+	// defer { lpp.deinit(); };
 
 	io::Memory mp;
 	mp.open();
 
-	Metaprogram m = lpp.createMetaprogram("old.lpp"_str, &testlpp, &mp);
+	Metaprogram m = lpp.createMetaprogram("tests/lppclang.lpp"_str, &testlpp, &mp);
 	if (!m)
 		return 1;
 
-	out.write({mp.buffer, mp.len});
+	fs::stdout.write({mp.buffer, mp.len});
 
 	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create);
-	if (outfile == nil)
+	if (isnil(outfile))
 		return 1;
 
 	io::formatv(&outfile, "test\n");
 
 	if (!lpp.runMetaprogram(m, &mp, &outfile))
 		return 1;
-
-	lpp.deinit();
 
 	return 0;
 }

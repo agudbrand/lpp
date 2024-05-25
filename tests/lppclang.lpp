@@ -1,0 +1,50 @@
+$$$
+require("lppclang").init(lpp, "lib/liblppclang.so")
+
+local test = function()
+	local c = lpp.getCursorAfterMacro()
+	local file = c:getFollowingString()
+	
+	local ast = lpp.clang.parseString(file)
+
+	local tu = ast:getTranslationUnitDecl()
+
+	local iter = tu:getDeclIter()
+	
+	if not iter then
+		error("failed to get translation unit decl iter", 2)
+	end
+
+	while true do
+		local d = iter:next()
+		if d == nil then
+			break
+		end
+
+		print(d:name())
+	end
+end
+
+$$$
+
+@test
+
+enum Thing
+{
+
+};
+
+struct Apple
+{
+
+};
+
+int test()
+{
+
+}
+
+int main()
+{
+	return 0;
+}
