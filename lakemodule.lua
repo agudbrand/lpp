@@ -1,13 +1,18 @@
-local options = lake.getOptions()
+local options = assert(lake.getOptions())
 
 local mode = options.mode or "debug"
 local build_dir = lake.cwd().."/build/"..mode.."/"
+
+options.registerCleaner(function()
+	lake.unlink(build_dir)
+end)
 
 lake.mkdir(build_dir, {make_parents = true})
 
 local report = assert(options.report)
 local reports = assert(options.reports)
 local recipes = assert(options.recipes)
+
 
 assert(reports.iro.objFiles, "lpp depends on iro's object files but they were not found in the reports table. Was iro's module imported? Maybe it was imported after this one.")
 
@@ -24,16 +29,20 @@ for c_file in c_files:each() do
 	report.objFile(o_file)
 
 	lake.target(o_file)
-		:depends_on(c_file)
+		:dependsOn(c_file)
 		:recipe(recipes.compiler(c_file, o_file))
 
 	lake.target(d_file)
-		:depends_on(c_file)
+		:dependsOn(c_file)
 		:recipe(recipes.depfile(c_file, d_file, o_file))
 end
 
 local ofiles = lake.flatten { reports.lpp.objFiles, reports.iro.objFiles }
 
 lpp
-	:depends_on(ofiles)
+	:dependsOn(ofiles)
 	:recipe(recipes.linker(ofiles, lpp))
+
+reports.getProjLibs("luajit"):each(function(e)
+	lpp:dependsOn(e)
+end)
