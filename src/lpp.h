@@ -15,6 +15,7 @@
 
 #include "iro/common.h"
 #include "iro/containers/pool.h"
+#include "iro/containers/list.h"
 
 #include "source.h"
 #include "parser.h"
@@ -28,6 +29,7 @@ struct MetaprogramContext
 {
 	Lpp* lpp;
 	Metaenvironment* metaenv;
+	DList<MetaprogramContext>::Node* list_node;
 };
 
 typedef void* Metaprogram;
@@ -38,9 +40,15 @@ struct Lpp
 
 	LuaState lua;
 
-	Pool<MetaprogramContext> contexts;
-	Pool<Source> sources;
-	Pool<Metaenvironment> metaenvs;
+	// TODO(sushi) fix up linked_pool so that it can properly replace all of this
+	Pool<MetaprogramContext> context_pool;
+	DList<MetaprogramContext> contexts;
+
+	Pool<Source> source_pool;
+	SList<Source> sources;
+
+	Pool<Metaenvironment> metaenv_pool;
+	SList<Metaenvironment> metaenvs;
 
     b8   init(Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();

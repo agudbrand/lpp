@@ -30,9 +30,12 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	lua.setGlobal(lpp_metaenv_stack);
 
 	DEBUG("creating pools\n");
-	contexts = Pool<MetaprogramContext>::create();
-	sources = Pool<Source>::create();
-	metaenvs = Pool<Metaenvironment>::create();
+	context_pool = Pool<MetaprogramContext>::create();
+	contexts = DList<MetaprogramContext>::create();
+	source_pool = Pool<Source>::create();
+	sources = SList<Source>::create();
+	metaenv_pool = Pool<Metaenvironment>::create();
+	metaenvs = SList<Metaenvironment>::create();
 
 	DEBUG("loading luajit ffi\n");
 	if (!lua.doFile("src/cdefs.lua"))
@@ -53,12 +56,15 @@ void Lpp::deinit()
 {
 	lua.deinit();
 	contexts.destroy();
+	context_pool.destroy();
 	for (auto& source : sources)
 		source.deinit();
 	sources.destroy();
+	source_pool.destroy();
 	for (auto& metaenv : metaenvs)
 		metaenv.deinit();
 	metaenvs.destroy();
+	metaenv_pool.destroy();
 
 	metaenv_chunk.close();
 	*this = {};
@@ -73,7 +79,8 @@ Metaprogram Lpp::createMetaprogram(
 {
 	DEBUG("creating metaprogram from input stream '", name, "'\n");
 
-	Source* source = sources.add();
+	Source* source = source_pool.add();
+	sources.push(source);
 	source->init(name);
 
 	Parser parser;
@@ -87,13 +94,16 @@ Metaprogram Lpp::createMetaprogram(
 	if (!parser.run())
 		return nullptr;
 
-	Source* dest = sources.add();
+	Source* dest = source_pool.add();
+	sources.push(dest);
 	dest->init("dest"_str);
 
-	Metaenvironment* metaenv = metaenvs.add();
+	Metaenvironment* metaenv = metaenv_pool.add();
+	metaenvs.push(metaenv);
 	metaenv->init(this, source, dest);
 
-	MetaprogramContext* ctx = contexts.add();
+	MetaprogramContext* ctx = context_pool.add();
+	contexts.pushHead(ctx);
 	ctx->lpp = this;
 	ctx->metaenv = metaenv;
 
@@ -278,6 +288,8 @@ struct MetaprogramBuffer
  *                 So this might just be how this has to be for now until I think of a better solution.
  *                 This might not even be that much better than making a lua string and passing it 
  *                 directly!!!!
+ *  TODO(sushi) this is so dumb, just make this a normal lua C function and pass the result back
+ *              as a string.
  */ 
 MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 {
@@ -294,7 +306,11 @@ MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 	Metaprogram m = lpp->createMetaprogram(path, &f, &mp);
 	if (!m)
 		return {};
-	defer { lpp->contexts.remove((MetaprogramContext*)m); };
+	defer 
+	{ 
+		lpp->contexts.remove(ctx->list_node);
+		lpp->context_pool.remove((MetaprogramContext*)m); 
+	};
 
 	// not a fan of making 2 mem buffers here
 	// (actually, 3, because the lexer uses one internally to keep token raws around
