@@ -1,0 +1,61 @@
+$$$
+require("lppclang").init(lpp, "../lppclang/build/debug/liblppclang.so")
+
+local enumStrings = function()
+	local section = lpp.getSectionAfterMacro()
+
+	local ast = lpp.clang.parseString(section:getString())
+	local tuiter = ast:getTranslationUnitDecl():getDeclIter()
+
+	local d = tuiter:next()
+
+	if not d:isEnum() then
+		error("@enumStrings was not used before an enum", 2)
+	end
+
+	local elements = d:getEnumIter()
+
+	local buffer = "static const str "..d:name().."_strings[] = \n{"
+
+	while true do
+		local element = elements:next()
+
+		if not element then
+			break
+		end
+
+		buffer = buffer..'\n\t"'..element:name()..","
+	end
+
+	buffer = buffer.."\n};\n\n"
+
+	section:insertString(d:getEnd(), buffer)
+
+	if d:tagIsEmbeddedInDeclarator() then
+		-- some variables are declared immediately following the enum declaration, so to
+		-- find the end of it we need to walk over each following declaration until 
+		-- we arrive at one that is not of this enum's type
+		print(tuiter:next():type():getTypeName())
+	end
+end
+
+$$$
+
+int main()
+{
+
+	@enumStrings
+	enum class MoveState
+	{
+		Stationary,
+		Walking,
+		Running,
+		Sliding,
+		Jumping,
+		Falling,
+		Swimming,
+		KnockedBack,
+		HangingOnLedge,
+	} instance, hey, hello;
+
+}

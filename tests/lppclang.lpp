@@ -1,19 +1,14 @@
 $$$
-require("lppclang").init(lpp, "lib/liblppclang.so")
+require("lppclang").init(lpp, "../lppclang/build/debug/liblppclang.so")
 
 local test = function()
-	local c = lpp.getCursorAfterMacro()
-	local file = c:getFollowingString()
-	
-	local ast = lpp.clang.parseString(file)
+	local section = lpp.getSectionAfterMacro()
 
-	local tu = ast:getTranslationUnitDecl()
+	local ast = lpp.clang.parseString(section:getString())
+	local iter = ast:getTranslationUnitDecl():getDeclIter()
 
-	local iter = tu:getDeclIter()
-	
-	if not iter then
-		error("failed to get translation unit decl iter", 2)
-	end
+	local offsets = {}
+	local funcbodyoffsets = {}
 
 	while true do
 		local d = iter:next()
@@ -21,7 +16,12 @@ local test = function()
 			break
 		end
 
-		print(d:name())
+		table.insert(offsets, {d:getBegin(), d:name()})
+	end
+
+	for i=1,#offsets do
+		local offset = offsets[#offsets-i+1]
+		section:insertString(offset[1], "// "..offset[2].."\n")
 	end
 end
 
@@ -29,17 +29,35 @@ $$$
 
 @test
 
-enum Thing
+#define AlignAs8 alignas(8)
+
+#define ProjectPrefix(x) CoolProject_##x
+
+#define Make3Of(name) \
+	struct ProjectPrefix(name##1) {}; \
+	struct ProjectPrefix(name##2) {}; \
+	struct ProjectPrefix(name##3) {}; 
+
+Make3Of(Vector)
+
+enum ProjectPrefix(Thing)
 {
 
 };
 
-struct Apple
+template<typename T>
+struct AlignAs8 ProjectPrefix(Apple)
 {
-
+	T leaves;
 };
 
-int test()
+template<
+	typename Callback0,
+	typename Callback1,
+	typename Callback2,
+>
+__attribute__((visibility("hidden")))
+int ProjectPrefix(test)()
 {
 
 }

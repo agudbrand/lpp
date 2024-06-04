@@ -1,0 +1,86 @@
+$$$
+
+require("lppclang").init(lpp, "../lppclang/build/debug/liblppclang.so")
+
+local parseEnumOrFlags = function()
+	local section = lpp.getSectionAfterMacro()
+	local lex = lpp.clang.lexSection(section, {consume = true})
+
+	lex:next()
+
+	if not lex:at(lex.identifier) then
+		error("expected an identifier to name enum", 2)
+	end
+
+	local name = lex:curtRaw()
+
+	local elements = {}
+
+	while lex:next() do
+		if lex:at(lex.eof) or lex:at(";") then break end
+
+		if not lex:at("|") then
+			error("expected '|'", 2)
+		end
+
+		lex:next()
+
+		if not lex:at(lex.identifier) then
+			error("expected an identifier", 2)
+		end
+
+		table.insert(elements, lex:curtRaw())
+	end
+ 	
+	return name, elements
+end
+
+local enum = function()
+	local name,elements = parseEnumOrFlags()
+
+	local indent = lpp.getMacroIndentation()
+
+	local out = "enum class "..name.."\n{"
+
+	for _,element in ipairs(elements) do
+		out = out.."\n"..indent.."\t"..element..","
+	end
+
+	return out.."\n};\n\n"
+end
+
+local flags = function()
+	local name,elements = parseEnumOrFlags()
+
+	local indent = lpp.getMacroIndentation()
+
+	local out = "enum class "..name.."\n"..indent.."{"
+
+	for i,element in ipairs(elements) do
+		out = out.."\n"..indent.."\t"..element.." = 1 << "..tostring(i-1)..","
+	end	
+
+	return out.."\n"..indent.."};\n\n"
+end
+
+$$$
+
+@enum MoveState 
+	| Walking
+	| Running
+	| Jumping
+	| Falling;
+
+@flags StatusEffect
+	| Bleeding
+	| Poisoned
+	| Dazed 
+	| Unconcious;
+
+int main()
+{
+	@flags LocalFlags
+		| Flag0
+		| Flag1
+		| Flag2;
+}
