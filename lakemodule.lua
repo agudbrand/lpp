@@ -28,7 +28,7 @@ local cflags = List
 }
 
 if mode == "debug" then
-	cflags:push { "-O0", "-ggdb0", "-DLPP_DEBUG=1" }
+	cflags:push { "-O0", "-ggdb3", "-DLPP_DEBUG=1" }
 else
 	cflags:push "-O2"
 end
@@ -36,7 +36,8 @@ end
 local lflags = List
 {
 	options.getProjLibs "luajit",
-	options.getProjLibs "lppclang",
+	"-Wl,--dynamic-list=src/exportedsymbols"
+	-- options.getProjLibs "lppclang",
 }
 
 local c_files = lake.find("src/**/*.cpp")
@@ -46,8 +47,6 @@ for c_file in c_files:each() do
 	local d_file = o_file:gsub("(.-)%.o", "%1.d")
 
 	report.objFile(o_file)
-
-	lpp:dependsOn(o_file)
 
 	lake.target(o_file)
 		:dependsOn(c_file)
@@ -60,12 +59,12 @@ end
 
 local ofiles = lake.flatten { reports.lpp.objFiles, reports.iro.objFiles }
 
-lpp:recipe(recipes.linker(ofiles, lpp, lflags))
+lpp:dependsOn(ofiles):recipe(recipes.linker(ofiles, lpp, lflags))
 
 options.getProjLibs("luajit"):each(function(e)
 	lpp:dependsOn(e)
 end)
 
-options.getProjLibs("lppclang"):each(function(e)
-	lpp:dependsOn(e)
-end)
+--options.getProjLibs("lppclang"):each(function(e)
+--	lpp:dependsOn(e)
+--end)
