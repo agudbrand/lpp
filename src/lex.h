@@ -43,6 +43,7 @@ struct Token
 
     s32 source_location;
 	s32 length;
+	str macro_indentation;
 
 	static Token invalid() { return {Kind::Invalid}; }
 

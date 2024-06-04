@@ -107,7 +107,7 @@ b8 Parser::run()
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
-				writeOut("__metaenv.macro("_str, curt->source_location, ',');
+				writeOut("__metaenv.macro("_str, curt->source_location, ",\"", curt->macro_indentation, "\",");
 
 				nextToken(); // identifier
 				writeOut(getRaw());
@@ -134,8 +134,6 @@ b8 Parser::run()
 				break;
 		}
 	}
-
-	// write_out("return __metaenv.final()\n");
 
 	return true;
 }

@@ -45,6 +45,7 @@ struct Section
 	SectionNode* node = nullptr;
 
 	u64 macro_idx = -1;
+	str macro_indent = nil;
 
 
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -52,10 +53,11 @@ struct Section
 
 
 	b8 initDocument(u64 start_offset, str raw, SectionNode* node);
-	b8 initMacro(u64 start_offset, u64 macro_idx, SectionNode* node);
+	b8 initMacro(u64 start_offset, str macro_indent, u64 macro_idx, SectionNode* node);
 	void deinit();
 
 	b8 insertString(u64 start, str s);
+	b8 consumeFromBeginning(u64 len);
 };
 
 /* ================================================================================================ Cursor
@@ -101,7 +103,7 @@ struct Metaenvironment
 	Section* insertSection(u64 idx);
 
 	void addDocumentSection(u64 start, str s);
-	void addMacroSection(s64 start, u64 macro_idx);
+	void addMacroSection(s64 start, str indent, u64 macro_idx);
 
 	b8 processSections();
 };
@@ -109,7 +111,7 @@ struct Metaenvironment
 extern "C"
 {
 
-void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start, u64 macro_idx);
+void metaenvironmentAddMacroSection(MetaprogramContext* ctx, str indentation, u64 start, u64 macro_idx);
 void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
 
 Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);

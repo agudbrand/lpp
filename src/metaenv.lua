@@ -11,8 +11,14 @@ local strtype = ffi.typeof("str")
 local make_str = function(s)
 	return strtype(s, #s)
 end
+local strToLua = function(s)
+	return ffi.string(s.s, s.len)
+end
 
 local Bytes = ffi.typeof("Bytes")
+
+local Section,
+	  Cursor
 
 local buffer = require "string.buffer"
 local co = require "coroutine"
@@ -55,7 +61,7 @@ menv.val = function(start, x)
 	C.metaenvironmentAddDocumentSection(lpp.context, start, make_str(s))
 end
 
-menv.macro = function(start, m, ...)
+menv.macro = function(start, indent, m, ...)
 	local args = {...}
 	if not m then
 		error("macro identifier is nil", 2)
@@ -65,7 +71,7 @@ menv.macro = function(start, m, ...)
 	-- I'll need to profile this stuff later to see
 	-- if it has horrible effects
 	table.insert(menv.macro_table, function() return m(unpack(args)) end)
-	C.metaenvironmentAddMacroSection(lpp.context, start, #menv.macro_table)
+	C.metaenvironmentAddMacroSection(lpp.context, make_str(indent), start, #menv.macro_table)
 end
 
 -- [[
@@ -75,11 +81,8 @@ end
 -- ]]
 
 
--- returns the indentation preceeding the current token
--- TODO(sushi) reimplement
-lpp.indentation = function()
-	local i = C.getTokenIndentation(lpp.handle, macro_token_index)
-	return ffi.string(i.s, i.len)
+lpp.getMacroIndentation = function()
+	return strToLua(C.metaenvironmentGetMacroIndent(lpp.context))
 end
 
 lpp.processFile = function(path)
@@ -104,7 +107,7 @@ end
 
 -- Document 'cursor', used for iterating the document parts of the 
 -- file from within a macro and possibly consuming pieces of the document.
-local Cursor = {}
+Cursor = {}
 Cursor.__index = Cursor
 
 Cursor.new = function()
@@ -137,6 +140,10 @@ Cursor.getFollowingString = function(self)
 	return ffi.string(s.s, s.len)
 end
 
+Cursor.getSection = function(self)
+	return Section.new(C.cursorGetSection(self.handle))
+end
+
 lpp.getOutputSoFar = function()
 	return menv.output:tostring()
 end
@@ -145,7 +152,7 @@ lpp.getCursorAfterMacro = function()
 	return Cursor.new()
 end
 
-local Section = {}
+Section = {}
 Section.__index = Section
 
 Section.new = function(handle)
@@ -179,6 +186,15 @@ end
 
 Section.insertString = function(self, offset, s)
 	return C.sectionInsertString(self.handle, offset, make_str(s))
+end
+
+Section.getString = function(self)
+	local s = C.sectionGetString(self.handle)
+	return ffi.string(s.s, s.len)
+end
+
+Section.consumeFromBeginning = function(self, len)
+	return 0 ~= C.sectionConsumeFromBeginning(self.handle, len)
 end
 
 lpp.getSectionAfterMacro = function()

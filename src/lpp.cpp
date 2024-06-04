@@ -232,15 +232,6 @@ b8 Lpp::cacheMetaenvironment()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ metaenvironmentLoader
- */
-const char* metaenvironmentLoader(lua_State* L, void* data, size_t* size)
-{
-	io::Memory* m = (io::Memory*)data;
-	*size = m->len;
-	return (const char*)m->buffer;
-}
-
 /* ------------------------------------------------------------------------------------------------ Lpp::load_metaenvironment
  */
 b8 Lpp::loadMetaenvironment()

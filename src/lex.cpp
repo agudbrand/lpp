@@ -19,7 +19,7 @@ b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current
 
 void Lexer::advance(s32 n)
 {
-    auto readStreamIfNeeded = [this]()
+    auto readStreamIfNeeded = [this]() -> b8
     {
         if (source->cache.atEnd() ||
             cursor.isEmpty())
@@ -36,17 +36,17 @@ void Lexer::advance(s32 n)
 			{
 				cursor_codepoint.codepoint = 0;
 				cursor_codepoint.advance = 1;
-				return;
+				return false;
 			}
             source->cache.commit(bytes_read);
 			cursor = str::from(reserved.ptr, bytes_read);
         }
+		return true;
     };
 
 	for (s32 i = 0; i < n; i++)
 	{
-        readStreamIfNeeded();
-		if (cursor_codepoint.codepoint == 0)
+        if (!readStreamIfNeeded())
 			return;
 
         cursor_codepoint = cursor.advance();
@@ -117,10 +117,35 @@ b8 Lexer::run()
 		initCurt();
 		skipWhitespace();
 
+		str trailing_space = nil;
+
 		while (not at('@') and
 			   not at('$') and
 			   not eof())
+		{
+
+			if (isnil(trailing_space))
+			{
+				if (isspace(current()) and not at('\n'))
+					trailing_space = {currentptr(), cursor_codepoint.advance};
+			}
+			else
+			{
+				if (at('\n') or not isspace(current()))
+					trailing_space = nil;
+				else
+					trailing_space.len += cursor_codepoint.advance;
+			}
+
+			INFO("\n----",
+					"\ntrailing_space: ", io::SanitizeControlCharacters(trailing_space), 
+					"\ncursor:         ", io::SanitizeControlCharacters(cursor), "\n\n");
+
 			advance();
+
+		}
+
+		DEBUGEXPR(io::SanitizeControlCharacters(trailing_space));
 
 		finishCurt(Document);
 
@@ -133,6 +158,7 @@ b8 Lexer::run()
 
 		if (at('$'))
 		{
+			TRACE("encountered $\n");
 			advance();
 			if (at('$'))
 			{
@@ -213,8 +239,10 @@ b8 Lexer::run()
 		}
 		else if (at('@'))
 		{
+			TRACE("encountered @\n");
 			initCurt();
 			advance();
+			curt.macro_indentation = trailing_space;
 			finishCurt(MacroSymbol);
 
 			skipWhitespace();

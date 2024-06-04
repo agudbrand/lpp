@@ -41,11 +41,13 @@ ffi.cdef
 	typedef struct Cursor Cursor;
 	typedef struct SectionNode SectionNode;
 
-	void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start, u64 macro_idx);
+	void metaenvironmentAddMacroSection(MetaprogramContext* ctx, str indentation, u64 start, u64 macro_idx);
 	void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
 
 	Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
 	void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor);
+
+	str metaenvironmentGetMacroIndent(MetaprogramContext* ctx);
 
 	b8  cursorNextChar(Cursor* cursor);
 	b8  cursorNextSection(Cursor* cursor);
@@ -64,6 +66,8 @@ ffi.cdef
 
 	b8 sectionInsertString(SectionNode* section, u64 offset, str s);
 
+	str sectionGetString(SectionNode* section);
 
+	b8 sectionConsumeFromBeginning(SectionNode* section, u64 len);
 ]]
 

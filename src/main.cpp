@@ -43,7 +43,9 @@ int main(int argc, char** argv)
 				PadVerbosity);
 	}
 
-	auto testlpp = scoped(fs::File::from("tests/lppclang.lpp"_str, fs::OpenFlag::Read));
+	str testpath = "tests/clang/lex.lpp"_str;
+
+	auto testlpp = scoped(fs::File::from(testpath, fs::OpenFlag::Read));
 	if (isnil(testlpp))
 		return 1;
 
@@ -55,19 +57,17 @@ int main(int argc, char** argv)
 	io::Memory mp;
 	mp.open();
 
-	Metaprogram m = lpp.createMetaprogram("tests/lppclang.lpp"_str, &testlpp, &mp);
+	Metaprogram m = lpp.createMetaprogram(testpath, &testlpp, &mp);
 	if (!m)
 		return 1;
 
 	fs::stdout.write({mp.buffer, mp.len});
 
-	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create);
+	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
 	if (isnil(outfile))
 		return 1;
 
-	io::formatv(&outfile, "test\n");
-
-	if (!lpp.runMetaprogram(m, &mp, &outfile))
+	if (!lpp.runMetaprogram(m, &mp, &fs::stdout))
 		return 1;
 
 	return 0;

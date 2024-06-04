@@ -16,13 +16,14 @@ b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Section::initDocument
+/* ------------------------------------------------------------------------------------------------ Section::initMacro
  */
-b8 Section::initMacro(u64 start_offset_, u64 macro_idx_, SectionNode* node_)
+b8 Section::initMacro(u64 start_offset_, str macro_indent_, u64 macro_idx_, SectionNode* node_)
 {
 	start_offset = start_offset_;
 	node = node_;
 	macro_idx = macro_idx_;
+	macro_indent = macro_indent_;
 	kind = Kind::Macro;
 	return true;
 }
@@ -50,12 +51,32 @@ b8 Section::insertString(u64 offset, str s)
 {
 	assert(offset <= mem.len);
 
-	mem.reserve(s.len);
-	mem.commit(s.len);
+	mem.reserve(s.len + 1);
+	mem.commit(s.len + 1);
 
-	mem::move(mem.buffer + offset + s.len, mem.buffer + offset, s.len);
+	mem::move(mem.buffer + offset + s.len, mem.buffer + offset, mem.len - offset);
 	mem::copy(mem.buffer + offset, s.bytes, s.len);
 
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ Section::consumeFromBeginning
+ */
+b8 Section::consumeFromBeginning(u64 len)
+{
+	if (len > mem.len)
+		return false;
+
+	if (len == mem.len)
+	{
+		mem.clear();
+		return true;
+	}
+
+	// idk man find a way to not move shit around later maybe with just a str ? idk we edit stuff
+	// too much and IDRC at the moment!!!
+	mem::move(mem.buffer, mem.buffer + len, mem.len - len);
+	mem.len -= len;
 	return true;
 }
 
@@ -91,10 +112,10 @@ void Metaenvironment::addDocumentSection(u64 start, str raw)
 
 /* ------------------------------------------------------------------------------------------------ Metaenvironment::addMacroSection
  */
-void Metaenvironment::addMacroSection(s64 start, u64 macro_idx)
+void Metaenvironment::addMacroSection(s64 start, str indent, u64 macro_idx)
 {
 	Section* s = sections.add();
-	s->initMacro(start, macro_idx, section_list.pushTail(s));
+	s->initMacro(start, indent, macro_idx, section_list.pushTail(s));
 }
 
 /* ------------------------------------------------------------------------------------------------ Metaenvironment::processSections
@@ -135,7 +156,6 @@ b8 Metaenvironment::processSections()
 			output->writeCache(s->mem.asStr());
 			break;
 		}
-
 	}
 
 	output->cacheLineOffsets();
@@ -157,9 +177,9 @@ extern "C"
 
 /* ------------------------------------------------------------------------------------------------ metaenvironmentAddMacroSection
  */
-void metaenvironmentAddMacroSection(MetaprogramContext* ctx, u64 start, u64 macro_idx)
+void metaenvironmentAddMacroSection(MetaprogramContext* ctx, str indent, u64 start, u64 macro_idx)
 {
-	ctx->metaenv->addMacroSection(start, macro_idx);
+	ctx->metaenv->addMacroSection(start, indent, macro_idx);
 }
 
 /* ------------------------------------------------------------------------------------------------ metaenvironmentAddDocumentSection
@@ -191,6 +211,15 @@ Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx)
 void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor)
 {
 	ctx->metaenv->cursors.remove(cursor);
+}
+
+/* ------------------------------------------------------------------------------------------------ metaenvironmentGetMacroIndent
+ */
+str metaenvironmentGetMacroIndent(MetaprogramContext* ctx)
+{
+	Metaenvironment* me = ctx->metaenv;
+	assert(sectionIsMacro(me->current_section));
+	return me->current_section->data->macro_indent;
 }
 
 /* ------------------------------------------------------------------------------------------------ cursorNextChar
@@ -264,6 +293,13 @@ SectionNode* metaenvironmentGetNextSection(MetaprogramContext* ctx)
 	return ctx->metaenv->current_section->next;
 }
 
+/* ------------------------------------------------------------------------------------------------ sectionGetString
+ */
+str sectionGetString(SectionNode* section)
+{
+	return section->data->mem.asStr();
+}
+
 /* ------------------------------------------------------------------------------------------------ sectionNext
  */
 SectionNode* sectionNext(SectionNode* section)
@@ -298,6 +334,14 @@ b8 sectionInsertString(SectionNode* section, u64 offset, str s)
 {
 	assert(sectionIsDocument(section));
 	return section->data->insertString(offset, s);
+}
+
+/* ------------------------------------------------------------------------------------------------ sectionConsumeFromBeginning
+ */
+b8 sectionConsumeFromBeginning(SectionNode* section, u64 len)
+{
+	assert(sectionIsDocument(section));
+	return section->data->consumeFromBeginning(len);
 }
 
 }
