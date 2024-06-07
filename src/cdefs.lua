@@ -69,5 +69,7 @@ ffi.cdef
 	str sectionGetString(SectionNode* section);
 
 	b8 sectionConsumeFromBeginning(SectionNode* section, u64 len);
+
+	str metaenvironmentGetOutputSoFar(MetaprogramContext* ctx);
 ]]
 

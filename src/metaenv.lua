@@ -144,10 +144,6 @@ Cursor.getSection = function(self)
 	return Section.new(C.cursorGetSection(self.handle))
 end
 
-lpp.getOutputSoFar = function()
-	return menv.output:tostring()
-end
-
 lpp.getCursorAfterMacro = function()
 	return Cursor.new()
 end
@@ -202,6 +198,10 @@ lpp.getSectionAfterMacro = function()
 	if s ~= 0 then
 		return Section.new(s)
 	end
+end
+
+lpp.getOutputSoFar = function()
+	return strToLua(C.metaenvironmentGetOutputSoFar(lpp.context))
 end
 
 -- API for extending various things in lpp

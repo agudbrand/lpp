@@ -18,4 +18,5 @@ sectionInsertString;
 sectionGetString;
 sectionConsumeFromBeginning;
 metaenvironmentGetMacroIndent;
+metaenvironmentGetOutputSoFar;
 };

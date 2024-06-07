@@ -222,6 +222,14 @@ str metaenvironmentGetMacroIndent(MetaprogramContext* ctx)
 	return me->current_section->data->macro_indent;
 }
 
+/* ------------------------------------------------------------------------------------------------ metaenvironmentGetOutputSoFar
+ */
+str metaenvironmentGetOutputSoFar(MetaprogramContext* ctx)
+{
+	Metaenvironment* me = ctx->metaenv;
+	return me->output->cache.asStr();
+}
+
 /* ------------------------------------------------------------------------------------------------ cursorNextChar
  */
 b8 cursorNextChar(Cursor* cursor)
