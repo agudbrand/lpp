@@ -1,0 +1,141 @@
+$$$
+require("lppclang").init(lpp, "../lppclang/build/debug/liblppclang.so")
+local buffer = require "string.buffer"
+
+local serializable = function()
+	
+	local section = lpp.getSectionAfterMacro()
+
+	local ast = lpp.clang.parseString(section:getString())
+	local tuiter = ast:getTranslationUnitDecl():getDeclIter()
+
+	local d = tuiter:next()
+
+	if not d:isStruct() then
+		error("@serializable must be used before a structure", 2)
+	end
+
+	local fields = d:getDeclIter()
+
+	local struct_name = d:name()
+
+	local serializer = buffer.new()
+	local deserializer = buffer.new()
+
+	serializer:put("void serialize"..struct_name.."(io::IO* out, "..struct_name.."* x)\n{")
+	deserializer:put("void deserialize"..struct_name.."(io::IO* in, "..struct_name.."* x)\n{")
+
+	while true do
+		local f = fields:next()
+
+		if not f then
+			break
+		end
+		
+		-- skip methods and other weird non-sense
+		if not f:isField() then
+			goto continue
+		end
+		
+		local field_name = f:name()
+
+		serializer:put("\n\tout->write({(u8*)&x->"..field_name..", sizeof(x->"..field_name..")});")
+		deserializer:put("\n\tin->read({(u8*)&x->"..field_name..", sizeof(x->"..field_name..")})")
+
+		::continue::
+	end
+
+	serializer:put("\n}\n")
+	deserializer:put("\n}\n")
+
+	print(serializer)
+	print(deserializer)
+end
+
+$$$
+
+@serializable
+struct Player : public Object {
+
+	vec3 inputs;
+	vec2 mouse_delta;
+
+	geo::Surface* current_floor;
+	geo::Surface* current_wall;
+	geo::Surface* current_ceil;
+
+	Cam camera;
+
+	vec3 forward;
+	vec3 right;
+	vec3 up;
+
+	f32 max_walk_speed;
+	f32 max_run_speed;
+	f32 walk_accel;
+	f32 run_accel;
+	f32 air_accel;
+	f32 air_speed_limit;
+	f32 walking_friction;
+	f32 slide_friction;
+	f32 jump_impulse;
+	f32 jump_boost_val;
+	f32 jump_boost_time;
+	f32 stationary_speed_threshhold;
+	f32 step_height;
+	
+	f32 height;
+	f32 width;
+
+	s32 ground_iterations;
+	s32 air_iterations;
+	s32 slide_iterations;
+
+	f32 fly_speed;
+
+	struct {
+		uiItem* menu;
+	} ui;
+
+	// time since started jumping and holding space
+	Stopwatch jumping_timer;
+
+	enum class CamMode : u32 {
+		Free,
+		Follow,
+		FirstPerson,
+	} camera_mode;
+
+	f32 follow_distance;
+
+	enum class MoveState : u32 {
+		// no movement relative to current floor
+		Stationary,
+		// normal movement along the current floor
+		Walking,
+		Running,
+		// movement along the current floor 
+		// that cannot be directly stopped by the player
+		Sliding,
+		// jumping off of a surface into the air
+		// the player can hold space to increase jump 
+		// height for as long as 'jumping_timer' has not 
+		// reached JUMP_BOOST_TIME. If they let go of space 
+		// then they enter the Midair state
+		Jumping,
+		// free falling
+		Falling,
+		// TODO
+		Swimming,
+		KnockedBack,
+		HangingOnLedge,
+		
+		// debug flying state
+		Flying,
+	} movement_state;
+	static str8 move_state_strings[]; 
+		
+
+	void init();
+	void update();
+};
