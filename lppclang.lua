@@ -43,6 +43,7 @@ typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 Decl* testIncParse(str s);
+void addIncludeDir(Context* ctx, str s);
 Context* createContext();
 void destroyContext(Context*);
 Lexer* createLexer(Context* ctx, str s);
@@ -89,7 +90,6 @@ EnumIter* createEnumIter(Context* ctx, Decl* decl);
 Decl* getNextEnum(EnumIter* iter);
 void dumpAST(Context* ctx);
 str getClangDeclSpelling(Decl* decl);
-
 
 ]]
 
@@ -188,6 +188,18 @@ end
 
 Decl.isEnum = function(self)
 	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Enum
+end
+
+Decl.isStruct = function(self)
+	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Record
+end
+
+Decl.isVariable = function(self)
+	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Variable
+end
+
+Decl.isField = function(self)
+	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Field
 end
 
 Decl.getEnumIter = function(self)
@@ -409,8 +421,16 @@ clang.lexSection = function(sec, options)
 	return l
 end
 
-clang.parseString = function(str)
+clang.parseString = function(str, options)
+	options = options or {}
+
 	local ctx = createContext()
+
+	if options.include_dirs then
+		for _,d in ipairs(options.include_dirs) do
+			lppclang.addIncludeDir(ctx, make_str(d))
+		end
+	end
 
 	if lppclang.createASTFromString(ctx, make_str(str)) == 0 then
 		error("failed to create AST from string", 2)
