@@ -43,7 +43,7 @@ int main(int argc, char** argv)
 				PadVerbosity);
 	}
 
-	str testpath = "tests/clang/lex.lpp"_str;
+	str testpath = "tests/clang/with-includes/main.cpp"_str;
 
 	auto testlpp = scoped(fs::File::from(testpath, fs::OpenFlag::Read));
 	if (isnil(testlpp))

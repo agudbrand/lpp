@@ -36,8 +36,8 @@ end
 local lflags = List
 {
 	options.getProjLibs "luajit",
-	"-Wl,--dynamic-list=src/exportedsymbols"
-	-- options.getProjLibs "lppclang",
+	"-Wl,--dynamic-list=src/exportedsymbols",
+	options.getProjLibs "lppclang",
 }
 
 local c_files = lake.find("src/**/*.cpp")
@@ -65,6 +65,6 @@ options.getProjLibs("luajit"):each(function(e)
 	lpp:dependsOn(e)
 end)
 
---options.getProjLibs("lppclang"):each(function(e)
---	lpp:dependsOn(e)
---end)
+options.getProjLibs("lppclang"):each(function(e)
+	lpp:dependsOn(e)
+end)
