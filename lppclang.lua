@@ -51,6 +51,8 @@ Token* lexerNextToken(Lexer* l);
 str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
 TokenKind tokenGetKind(Token* t);
 b8 createASTFromString(Context* ctx, str s);
+Decl* parseString(Context* ctx, str s);
+void dumpDecl(Decl* decl);
 Decl* getTranslationUnitDecl(Context* ctx);
 DeclIter* createDeclIter(Context* ctx, Decl* decl);
 Decl* getNextDecl(DeclIter* iter);
@@ -89,9 +91,7 @@ u64 getFieldOffset(Context* ctx, Decl* field);
 EnumIter* createEnumIter(Context* ctx, Decl* decl);
 Decl* getNextEnum(EnumIter* iter);
 void dumpAST(Context* ctx);
-str getClangDeclSpelling(Decl* decl);
-
-]]
+str getClangDeclSpelling(Decl* decl);]]
 
 -- set to the lpp object when loaded
 local lpp 
@@ -109,10 +109,11 @@ local strToLua = function(s)
 	return ffi.string(s.s, s.len)
 end
 
--- api used by lpp user
+--- General api for using lppclang.
 local clang = {}
 
-local AST,
+-- forward declarations
+local Ctx,
       Decl,
 	  Type,
 	  Function,
@@ -123,93 +124,176 @@ local AST,
 	  Lexer,
 	  Token
 
--- Wrapper around a Context* that provides access to its functions via
--- lua methods as well as some helper methods.
-AST = {}
-AST.__index = AST
-
-AST.new = function(ctx)
-	assert(ctx, "AST.new called without a context")
-
+local makeStruct = function()
 	local o = {}
-	setmetatable(o, AST)
-	o.ctx = ctx
+	o.__index = o
 	return o
 end
 
-AST.getTranslationUnitDecl = function(self) 
-	local tu = lppclang.getTranslationUnitDecl(self.ctx)
-	return Decl.new(self, tu)
-end
+--- A clang context which, at the moment, allows incrementally 
+--- parsing C++ code.
+---
+---@class Ctx
+---@field handle userdata Handle to the internal representation of this Ctx
+Ctx = makeStruct()
 
-AST.dump = function(self)
-	lppclang.dumpAST(self.ctx)
-end
+--- Create a new lppclang context.
+---
+---@return Ctx
+Ctx.new = function()
+	local o = setmetatable({}, Ctx)
 
-Decl = {}
-Decl.__index = Decl
+	o.handle = assert(lppclang.createContext(), "failed to create lppclang context!")
 
-Decl.new = function(ast, d)
-	assert(d, "Decl.new called without a decl pointer")
+	-- automatically clean up the context
+	ffi.gc(o.handle, function(self)
+		lppclang.destroyContext(self.handle)
+	end)
 
-	local o = {}
-	setmetatable(o, Decl)
-	o.ast = ast
-	o.decl = d
 	return o
 end
 
+--- Parse a given string using the given context.
+--- This currently assumes that what is being parsed is in global
+--- scope, but supports some extra stuff I'll have to document later.
+---
+--- A Decl representing the fake translation unit will be returned.
+---
+-- TODO(sushi) maybe just return the DeclIter over the TU instead
+--
+---@param code string
+---@return Decl
+Ctx.parseString = function(self, code)
+	return Decl.new(self, assert(lppclang.parseString(self.handle, make_str(code)), "failed to parse given string!"))
+end
+
+--- Add a path to the include search list.
+--- The path must exist, otherwise the program will crash (for now).
+---
+---@param path string
+Ctx.addIncludeDir = function(self, path)
+	lppclang.addIncludeDir(self.handle, make_str(path))
+end
+
+--- A parsed declaration.
+---
+---@class Decl
+---@field ctx Ctx The context this Decl was parsed in.
+---@field handle userdata Handle to the internal representation of this Decl.
+Decl = makeStruct()
+
+--- Construct a new Decl in ctx.
+---
+---@param ctx Ctx
+---@param handle userdata
+Decl.new = function(ctx, handle)
+	return setmetatable(
+	{
+		ctx = ctx,
+		handle = handle
+	}, Decl)
+end
+
+--- Assuming that this declaration acts as a context for other declarations,
+--- creates and returns a DeclIter over its child decls.
+---
+--- Returns nil on failure.
+---
+---@return DeclIter?
 Decl.getDeclIter = function(self)
-	local iter = lppclang.createDeclIter(self.ast.ctx, self.decl)
+	local iter = lppclang.createDeclIter(self.ctx.handle, self.handle)
 	if iter == nil then
-		return false
+		return
 	end
 
-	return DeclIter.new(self.ast, iter)
+	return DeclIter.new(self.ctx, iter)
 end
 
+--- Get a string of the name of this Decl
+---
+---@return string
 Decl.name = function(self)
-	local n = lppclang.getDeclName(self.decl)
+	local n = lppclang.getDeclName(self.handle)
 	return ffi.string(n.s, n.len)
 end
 
+--- Retrieve the Type of this declaration.
+---
+---@return Type
 Decl.type = function(self)
-	local t = lppclang.getDeclType(self.decl)
-	return Type.new(self.ast, t)
+	local t = lppclang.getDeclType(self.handle)
+	return Type.new(self.ctx, t)
 end
 
+--- Get the offset into the string this Decl was parsed from that
+--- it begins at. 
+---
+---@return number
 Decl.getBegin = function(self)
-	return tonumber(lppclang.getDeclBegin(self.ast.ctx, self.decl))
+	return assert(tonumber(lppclang.getDeclBegin(self.ctx.handle, self.handle)))
 end
 
+--- Get the offset into the string this Decl was parsed from that
+--- it ends at.
+---
+---@return number
 Decl.getEnd = function(self)
-	return tonumber(lppclang.getDeclEnd(self.ast.ctx, self.decl))
+	return assert(tonumber(lppclang.getDeclEnd(self.ctx.handle, self.handle)))
 end
 
+--- Test if this Decl is an enum.
+---
+---@return boolean
 Decl.isEnum = function(self)
-	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Enum
+	return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Enum
 end
 
+--- Test if this Decl is a struct.
+---
+---@return boolean
 Decl.isStruct = function(self)
-	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Record
+	return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Record
 end
 
+--- Test if this Decl is a variable.
+---
+---@return boolean
 Decl.isVariable = function(self)
-	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Variable
+	return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Variable
 end
 
+--- Test if this Decl is a field, a variable that is a part of a struct.
+---
+---@return boolean
 Decl.isField = function(self)
-	return lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Field
+	return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Field
 end
 
+--- Given that this Decl is an enum, creates and returns an iterator
+--- over the enum's elements.
+---
+---@return EnumIter
 Decl.getEnumIter = function(self)
 	assert(self:isEnum(), "Decl.getEnumIter called on a decl that is not an enum")
 
-	return EnumIter.new(self.ast, lppclang.createEnumIter(self.ast.ctx, self.decl))
+	return EnumIter.new(self.ctx, assert(lppclang.createEnumIter(self.ctx.handle, self.handle), "failed to create an enum iter!"))
 end
 
+--- If this is a Tag declaration, eg. one that is named (struct, enum, etc.)
+--- check if it is embdedded in declarators.
+---
+--- Eg. this returns true for
+---	```cpp
+--- struct Apple {} apple;
+--- ```
+--- and false for 
+--- ```cpp
+---	struct Apple {};
+--- ```
+---
+---@return boolean
 Decl.tagIsEmbeddedInDeclarator = function(self)
-	return 0 ~= lppclang.tagIsEmbeddedInDeclarator(self.decl)
+	return 0 ~= lppclang.tagIsEmbeddedInDeclarator(self.handle)
 end
 
 Decl.asFunction = function(self)
@@ -218,89 +302,133 @@ Decl.asFunction = function(self)
 	end
 end
 
-DeclIter = {}
-DeclIter.__index = DeclIter
 
-DeclIter.new = function(ast, iter)
-	assert(iter, "DeclIter.new called without a decl iter pointer")
+--- An iterator over a sequence of declarations.
+---
+---@class DeclIter
+---@field ctx Ctx
+---@field handle userdata Handle to the internal representation of this DeclIter
+DeclIter = makeStruct()
 
-	local o = {}
-	setmetatable(o, DeclIter)
-	o.ast = ast
-	o.iter = iter
-	return o
+--- Construct a new DeclIter.
+---
+---@param ctx Ctx 
+---@param handle userdata
+DeclIter.new = function(ctx, handle)
+	return setmetatable(
+	{
+		ctx = ctx,
+		handle = handle,
+	}, DeclIter)
 end
 
+--- Retrieve the next Decl in the sequence, or nil if there's
+--- no more.
+---
+---@return Decl?
 DeclIter.next = function(self)
-	local nd = lppclang.getNextDecl(self.iter)
-	if nd == nil then
-		return nil
+	local nd = lppclang.getNextDecl(self.handle)
+	if nd ~= nil then
+		return Decl.new(self.ctx, nd)
 	end
-	return Decl.new(self.ast, nd)
 end
 
-Type = {}
-Type.__index = Type
+--- A C/C++ type.
+---
+---@class Type
+---@field ctx Ctx
+---@field handle userdata
+Type = makeStruct()
 
-Type.new = function(ast, t)
-	assert(ast and t)
-
-	local o = setmetatable({}, Type)
-	o.ast = ast
-	o.type = t
-	return o
+--- Construct a new Type
+---
+---@param ctx Ctx
+---@param handle userdata
+Type.new = function(ctx, handle)
+	return setmetatable(
+	{
+		ctx = ctx,
+		handle = handle
+	}, Type)
 end
 
+--- Check if this type is canonical.
+---
+---@return boolean
 Type.isCanonical = function(self)
-	return 0 ~= lppclang.isCanonical(self.type)
+	return 0 ~= lppclang.isCanonical(self.handle)
 end
 
+--- Check if this type is unqualified.
+---
+---@return boolean
 Type.isUnqualified = function(self)
-	return 0 ~= lppclang.isUnqualified(self.type)
+	return 0 ~= lppclang.isUnqualified(self.handle)
 end
 
+--- Check if this type is unqualified and canonical.
+---
+---@return boolean
 Type.isUnqualifiedAndCanonical = function(self)
-	return 0 ~= lppclang.isUnqualifiedAndCanonical(self.type)
+	return 0 ~= lppclang.isUnqualifiedAndCanonical(self.handle)
 end
 
+--- Check if this type is const.
+---
+---@return boolean
 Type.isConst = function(self)
-	return 0 ~= lppclang.isConst(self.type)
+	return 0 ~= lppclang.isConst(self.handle)
 end
 
+--- Retrieve the canonical representation of this Type.
+---
+---@return Type
 Type.getCanonicalType = function(self)
-	return Type.new(self.ast, lppclang.getCanonicalType(self.type))
+	return Type.new(self.ctx, lppclang.getCanonicalType(self.handle))
 end
 
+--- Retrieve the unqualified representation of this Type.
+---
+---@return Type
 Type.getUnqualifiedType = function(self)
-	return Type.new(self.ast, lppclang.getUnqualifiedType(self.type))
+	return Type.new(self.ctx, lppclang.getUnqualifiedType(self.handle))
 end
 
+--- Retrieve the unqualified canonical representation of this Type.
+---
+---@return Type
 Type.getUnqualifiedCanonicalType = function(self)
-	return Type.new(self.ast, lppclang.getUnqualifiedCanonicalType(self.type))
+	return Type.new(self.ctx, lppclang.getUnqualifiedCanonicalType(self.handle))
 end
 
+--- Retrieve the size in bytes of this type.
+---
+---@return number
 Type.size = function(self)
-	return tonumber(lppclang.getTypeSize(self.ast.ctx, self.type))
+	return assert(tonumber(lppclang.getTypeSize(self.ctx.handle, self.handle)))
 end
 
+--- Check if this type is a builting C/C++ type.
+---
+---@return boolean
 Type.isBuiltin = function(self)
-	return 0 ~= lppclang.typeIsBuiltin(self.type)
+	return 0 ~= lppclang.typeIsBuiltin(self.handle)
 end
 
 Type.getDecl = function(self)
-	return lppclang.getTypeDecl(self.type)
+	return lppclang.getTypeDecl(self.handle)
 end
 
 Type.getTypeName = function(self)
-	return strToLua(lppclang.getTypeName(self.ast.ctx, self.type))
+	return strToLua(lppclang.getTypeName(self.ctx.handle, self.handle))
 end
 
 Type.getCanonicalTypeName = function(self)
-	return strToLua(lppclang.getCanonicalTypeName(self.ast.ctx, self.type))
+	return strToLua(lppclang.getCanonicalTypeName(self.ctx.handle, self.handle))
 end
 
 Type.getUnqualifiedCanonicalTypeName = function(self)
-	return strToLua(lppclang.getUnqualifiedCanonicalTypeName(self.ast.ctx, self.type))
+	return strToLua(lppclang.getUnqualifiedCanonicalTypeName(self.ctx.handle, self.handle))
 end
 
 EnumIter = {}
@@ -437,6 +565,10 @@ clang.parseString = function(str, options)
 	end
 
 	return AST.new(ctx)
+end
+
+clang.createContext = function()
+	return Ctx.new()
 end
 
 local loaded = false

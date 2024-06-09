@@ -6,20 +6,14 @@ require("lppclang").init(lpp, "../lppclang/build/debug/liblppclang.so")
 local printFields = function()
 	local section = lpp.getSectionAfterMacro()
 
-	local fulltext = lpp.getOutputSoFar()..section:getString()
+	local ctx = lpp.clang.createContext()
 
-	local ast = lpp.clang.parseString(fulltext, 
-			{
-				include_dirs = { "tests/clang/with-includes" }
-			})
-	local tuiter = ast:getTranslationUnitDecl():getDeclIter()
+	ctx:addIncludeDir("tests/clang/with-includes")
+	ctx:parseString(lpp.getOutputSoFar())
 
-	local d = tuiter:next()
-
-	print(d:name())
-
-	local members = d:getDeclIter()
-
+	local diter = ctx:parseString(section:getString()):getDeclIter()
+	local struct = diter:next()
+	local members = struct:getDeclIter()
 	while true do
 		local member = members:next()
 
@@ -35,7 +29,6 @@ local printFields = function()
 
 		::continue::
 	end
-
 end
 
 $$$
