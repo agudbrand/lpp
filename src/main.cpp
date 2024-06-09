@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 	if (isnil(testlpp))
 		return 1;
 
-	Lpp lpp = {};
+	Lpp lpp = {}; 
 	if (!lpp.init(logger.verbosity))
 		return 1;
 	// defer { lpp.deinit(); };
