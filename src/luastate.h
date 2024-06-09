@@ -77,6 +77,11 @@ struct LuaState
 	b8 dump(io::IO* dest);
 
 	void stackDump(u32 max_depth = -1);
+
+	// currently-experimental debug hook installer 
+	// that im gonna play with for a bit before deciding
+	// what i wanna do with it, if anything
+	void installDebugHook();
 };
 
 #endif // _lpp_luastate_h

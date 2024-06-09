@@ -280,9 +280,55 @@ b8 LuaState::dump(io::IO* dest)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ LuaState::stack_dump
+/* ------------------------------------------------------------------------------------------------ LuaState::stackDump
  */
 void LuaState::stackDump(u32 max_depth)
 {
 	::stack_dump(L, max_depth);
+}
+
+/* ------------------------------------------------------------------------------------------------ LuaState::installDebugHook
+ */
+void LuaState::installDebugHook()
+{
+	auto hook = [](lua_State* L, lua_Debug* ar) -> void
+	{
+		lua_getinfo(L, "nSlu", ar);
+
+		b8 leaving_func = ar->event == LUA_HOOKRET;
+
+		if (ar->event == LUA_HOOKCALL)
+			INFO("calling ");
+		else
+			INFO("leaving ");
+
+		switch (cStrHash(ar->what))
+		{
+		case "main"_hashed:
+			INFO("main chunk\n");
+			break;
+
+		case "Lua"_hashed:
+			INFO("lua function\n");
+			break;
+
+		case "C"_hashed:
+			INFO("C function\n");
+			break;
+
+		case "tail"_hashed:
+			INFO("tail call\n");
+			break;
+		}
+
+		if (ar->name)
+		{
+			INFO("function name: ", ar->name, "\n");
+		}
+	};
+
+	if (lua_sethook(L, hook, LUA_MASKCALL | LUA_MASKRET, 0))
+	{
+		ERROR("failed to install debug hook!\n");
+	}
 }
