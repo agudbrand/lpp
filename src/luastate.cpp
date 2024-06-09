@@ -9,12 +9,12 @@ extern "C"
 
 #include "luahelpers.h"
 
+static Logger logger = Logger::create("luastate"_str, Logger::Verbosity::Info);
+
 /* ------------------------------------------------------------------------------------------------ LuaState::init
  */
-b8 LuaState::init(Logger::Verbosity verbosity)
+b8 LuaState::init()
 {
-	logger.init("luastate"_str, verbosity);
-
 	L = lua_open();
 	luaL_openlibs(L);
 

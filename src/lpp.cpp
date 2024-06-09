@@ -23,7 +23,7 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	INFO("init\n");
 
 	DEBUG("creating lua state\n");
-	lua.init(verbosity);
+	lua.init();
 
 	DEBUG("creating metaenv stack\n");
 	lua.newTable();
