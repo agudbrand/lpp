@@ -137,15 +137,9 @@ b8 Lexer::run()
 					trailing_space.len += cursor_codepoint.advance;
 			}
 
-			INFO("\n----",
-					"\ntrailing_space: ", io::SanitizeControlCharacters(trailing_space), 
-					"\ncursor:         ", io::SanitizeControlCharacters(cursor), "\n\n");
-
 			advance();
 
 		}
-
-		DEBUGEXPR(io::SanitizeControlCharacters(trailing_space));
 
 		finishCurt(Document);
 
@@ -158,7 +152,6 @@ b8 Lexer::run()
 
 		if (at('$'))
 		{
-			TRACE("encountered $\n");
 			advance();
 			if (at('$'))
 			{
@@ -239,7 +232,6 @@ b8 Lexer::run()
 		}
 		else if (at('@'))
 		{
-			TRACE("encountered @\n");
 			initCurt();
 			advance();
 			curt.macro_indentation = trailing_space;
