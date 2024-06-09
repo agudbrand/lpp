@@ -21,7 +21,7 @@ b8 Parser::init(
 	out = outstream;
 	source = src;
 
-	if (!lexer.init(in, src, verbosity))
+	if (!lexer.init(in, src))
 		return false;
 
 	if (setjmp(lexer.err_handler))

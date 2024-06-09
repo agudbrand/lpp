@@ -40,7 +40,8 @@ int main(int argc, char** argv)
 				ShowCategoryName |
 				ShowVerbosity |
 				TrackLongestName |
-				PadVerbosity);
+				PadVerbosity |
+				PrefixNewlines);
 	}
 
 	str testpath = "tests/clang/with-includes/main.cpp"_str;
@@ -61,7 +62,7 @@ int main(int argc, char** argv)
 	if (!m)
 		return 1;
 
-	fs::stdout.write({mp.buffer, mp.len});
+	INFO(mp.asStr());
 
 	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
 	if (isnil(outfile))
