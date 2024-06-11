@@ -44,16 +44,21 @@ int main(int argc, char** argv)
 				PrefixNewlines);
 	}
 
-	str testpath = "tests/clang/with-includes/main.cpp"_str;
+	Lpp lpp = {}; 
+	if (!lpp.init())
+		return 1;
+	// defer { lpp.deinit(); };
+	
+	auto cwd = scoped(fs::Path::cwd());
+	auto testdir = scoped(fs::Path::from("tests/import"_str));
+
+	testdir.chdir();
+
+	str testpath = "import.lpp"_str;
 
 	auto testlpp = scoped(fs::File::from(testpath, fs::OpenFlag::Read));
 	if (isnil(testlpp))
 		return 1;
-
-	Lpp lpp = {}; 
-	if (!lpp.init(logger.verbosity))
-		return 1;
-	// defer { lpp.deinit(); };
 
 	io::Memory mp;
 	mp.open();
@@ -64,12 +69,20 @@ int main(int argc, char** argv)
 
 	INFO(mp.asStr());
 
-	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
-	if (isnil(outfile))
+	io::Memory result;
+	result.open();
+
+	if (!lpp.runMetaprogram(m, &mp, &result))
 		return 1;
 
-	if (!lpp.runMetaprogram(m, &mp, &fs::stdout))
-		return 1;
+	cwd.chdir();
+
+	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
+	if (notnil(outfile))
+	{
+		outfile.write(result.asStr());
+		outfile.close();
+	}
 
 	return 0;
 }

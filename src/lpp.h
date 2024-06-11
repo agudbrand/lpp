@@ -16,12 +16,15 @@
 #include "iro/common.h"
 #include "iro/containers/pool.h"
 #include "iro/containers/list.h"
+#include "iro/luastate.h"
 
 #include "source.h"
 #include "parser.h"
-#include "luastate.h"
 
 using namespace iro;
+
+// Use on functions that need to be exposed to luajit's ffi interface.
+#define LPP_LUAJIT_FFI_FUNC EXPORT_DYNAMIC
 
 struct Metaenvironment;
 
@@ -36,8 +39,6 @@ typedef void* Metaprogram;
 
 struct Lpp
 {
-    Logger logger;
-
 	LuaState lua;
 
 	// TODO(sushi) fix up linked_pool so that it can properly replace all of this
@@ -50,7 +51,7 @@ struct Lpp
 	Pool<Metaenvironment> metaenv_pool;
 	SList<Metaenvironment> metaenvs;
 
-    b8   init(Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+    b8   init();
 	void deinit();
 
 	Metaprogram createMetaprogram(str name, io::IO* input_stream, io::IO* output_stream);

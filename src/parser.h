@@ -12,8 +12,6 @@
 
 struct Parser
 {
-	Logger logger;
-
 	Array<Token> tokens;
 
 	Lexer lexer;
@@ -27,7 +25,7 @@ struct Parser
 
 	jmp_buf err_handler;
 
-	b8   init(Source* source, io::IO* instream, io::IO* outstream, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+	b8   init(Source* source, io::IO* instream, io::IO* outstream);
 	void deinit();
 
 	b8 run();

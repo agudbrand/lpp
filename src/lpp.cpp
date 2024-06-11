@@ -12,22 +12,22 @@ extern "C"
 #include "lua.h"
 }
 
+static Logger logger = Logger::create("lpp"_str, Logger::Verbosity::Debug);
+
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
 /* ------------------------------------------------------------------------------------------------ Lpp::init
  */
-b8 Lpp::init(Logger::Verbosity verbosity)
+b8 Lpp::init()
 {
-    logger.init("lpp"_str, verbosity);
-
 	INFO("init\n");
 
 	DEBUG("creating lua state\n");
 	lua.init();
 
 	DEBUG("creating metaenv stack\n");
-	lua.newTable();
-	lua.setGlobal(lpp_metaenv_stack);
+	lua.newtable();
+	lua.setglobal(lpp_metaenv_stack);
 
 	DEBUG("creating pools\n");
 	context_pool = Pool<MetaprogramContext>::create();
@@ -38,14 +38,20 @@ b8 Lpp::init(Logger::Verbosity verbosity)
 	metaenvs = SList<Metaenvironment>::create();
 
 	DEBUG("loading luajit ffi\n");
-	if (!lua.doFile("src/cdefs.lua"))
+	if (!lua.dofile("src/cdefs.lua"))
 	{
 		ERROR("failed to load luajit ffi\n");
 		return false;
 	}
 
-	if (!cacheMetaenvironment())
+	if (!lua.require("lpp"_str))
 		return false;
+
+	// give lpp module a handle to us
+	lua.pushstring("handle"_str);
+	lua.pushlightuserdata(this);
+	lua.settable(lua.gettop()-2);
+	lua.pop();
 
     return true;
 }
@@ -84,7 +90,7 @@ Metaprogram Lpp::createMetaprogram(
 	source->init(name);
 
 	Parser parser;
-	if (!parser.init(source, instream, outstream, logger.verbosity))
+	if (!parser.init(source, instream, outstream))
 		return nullptr;
 	defer { parser.deinit(); };
 
@@ -103,7 +109,7 @@ Metaprogram Lpp::createMetaprogram(
 	metaenv->init(this, source, dest);
 
 	MetaprogramContext* ctx = context_pool.add();
-	contexts.pushHead(ctx);
+	ctx->list_node = contexts.pushHead(ctx);
 	ctx->lpp = this;
 	ctx->metaenv = metaenv;
 
@@ -123,72 +129,204 @@ b8 Lpp::runMetaprogram(
 
 	INFO("running metaprogram '", ctx->metaenv->input->name, "'\n");
 
-	if (!lua.load(input_stream, (const char*)ctx->metaenv->input->name.bytes))
+	const s32 luabottom = lua.gettop();
+	defer { lua.settop(luabottom); };
+
+	// TODO(sushi) maybe just make an actual Metaprogram type and 
+	//             put this logic there.
+
+	// Metaprogram phase 1
+	//
+	// Evaluate lua code and construct section list.
 	{
-		ERROR("failed to load metaprogram\n");
-		return false;
+		if (!lua.load(input_stream, (const char*)ctx->metaenv->input->name.bytes))
+		{
+			ERROR("failed to load metaprogram\n");
+			return false;
+		}
+		const s32 metaprogram_idx = lua.gettop();
+
+		// Get the metaenv construction function and call it to 
+		// make a new environment.
+		if (!lua.require("metaenv"_str))
+		{
+			ERROR("failed to load metaenvironment module\n");
+			return false;
+		}
+
+		// Call construction function with context.
+		
+		lua.pushlightuserdata(ctx);
+		if (!lua.pcall(1, 1))
+		{
+			ERROR("metaenvironment construction function failed\n");
+			return false;
+		}
+		const s32 metaenv_table_idx = lua.gettop();
+
+		// Set the new metaenvironment's __index to point 
+		// at the previous one so that any global variables 
+		// declared in it will be available.
+		
+		lua.getglobal(lpp_metaenv_stack);
+		const s32 metaenv_stack_idx = lua.gettop();
+		s32 me_stacklen = lua.objlen(metaenv_stack_idx);
+		
+		const s32 __index_string_idx = lua.gettop();
+
+		lua.pushinteger(me_stacklen);
+
+		lua.gettable(metaenv_stack_idx);
+		const s32 last_metaenv_idx = lua.gettop();
+
+		if (!lua.isnil())
+		{
+#if 0
+			// TODO(sushi) I'm stupid and this doesn't work.
+			//             Because a macro is evaluated after the lua code has been executed, whatever 
+			//             the last value of a global is is what a file passed to processFile will 
+			//             see, this allows stuff like: 
+			//
+			//               ---- import.lpp ----
+			//			       
+			//			       $ DEBUG = false
+			//
+			//			       @import "test.lpp"
+			//                 
+			//                 $ DEBUG = true
+			//			       
+			//			       int main() {}
+			//
+			//               ---- test.lpp ----
+			//
+			//                 void printMode()
+			//                 {
+			//                   $ if DEBUG then
+			//                     printf("debug\n");
+			//                   $ else
+			//                     printf("release\n");  
+			//                   $ end
+			//                 }
+			//
+			//               ---- result ----
+			//   
+			//                 void printMode()
+			//                 {
+			//                   printf("debug\n");
+			//                 }
+			//
+			//                 int main() {}
+			//           
+			//           I see this as incorrect behavior, and so it needs to be fixed somehow. The only
+			//           way I can think to handle it properly, since this doesnt work, is to create
+			//           snapshots of the metaenv's globals at each macro invocation. That kinda really
+			//           sucks, though. I managed to compress how large the environment table is to
+			//           only require two non-user elements, so its not like it would be a HUGE deal..
+			//           maybe. 
+			//
+			//
+			// Make a shallow copy of the current metaenv so that 
+			// we can avoid changing a global in an importer's file
+			// affecting the result of a file it imports.
+			lua.newtable();
+			const s32 copy_idx = lua.gettop();
+			
+			lua.pairs(last_metaenv_idx, [&]()
+				{
+					lua.pushvalue(-2);
+					lua.pushvalue(-2);
+					lua.settable(copy_idx);
+					return true;
+				});
+#else
+			lua.pushstring("__index"_str);
+			lua.insert(-2); // swap key and value
+#endif
+
+			lua.stackDump();
+
+			// set its index
+			lua.settable(metaenv_table_idx);
+
+		}
+		else
+			// remove unused values
+			lua.pop();
+		
+		// push the metaenv onto the stack
+		
+		lua.pushinteger(me_stacklen + 1);
+		lua.pushvalue(metaenv_table_idx);
+		lua.settable(metaenv_stack_idx);
+		lua.pop();
+
+		if (!lua.setfenv(metaprogram_idx))
+		{
+			ERROR("failed to set environment of metaprogram\n");
+			return false;
+		}
+		
+		if (!lua.pcall())
+		{
+			ERROR("failed to run metaprogram phase 1\n");
+			return false;
+		}
 	}
 
-	if (!loadMetaenvironment())
+	// S empty
+
+	// Get lpp and set the proper metaprogram context.
+	// The way this is done kinda sucks, but I'll try and clean it up
+	// properly when I move all of this into a Metaprogram thing.
+	if (!lua.require("lpp"_str))
 		return false;
+	const s32 lpp_idx = lua.gettop();
 
-	if (!lua.pcall(0, 2))
-	{
-		ERROR("failed to run metaenvironment\n");
-		return false;
-	}
+	// Save the old context.
+	lua.pushstring("context"_str);
+	lua.gettable(lpp_idx);
+	const s32 prev_context_idx = lua.gettop();
 
-	// the lpp table is at the top of the stack and we need to give it 
-	// a handle to this context
-	lua.pushString("context"_str);
-	lua.pushLightUserdata(ctx);
-	lua.setTable(-3);
-	lua.pop();
+	// ensure the context is restored
+	defer 
+	{ 
+		lua.pushstring("context"_str);
+		lua.pushvalue(prev_context_idx);
+		lua.settable(lpp_idx);
+	};
 
-	// set the new metaenvironment's __index to point 
-	// at the previous one so that any global variables 
-	// declared in it will be available
-	lua.getGlobal(lpp_metaenv_stack);
-	s32 stacklen = lua.objLen();
-	lua.pushString("__index"_str);
-	lua.pushInteger(stacklen);
-	lua.getTable(lua.getTop()-2);
+	// set the new one
+	lua.pushstring("context"_str);
+	lua.pushlightuserdata(ctx);
+	lua.settable(lpp_idx);
 
-	if (!lua.isNil())
-		lua.setTable(-4);
-	else
-		lua.pop(2);
+	// get metaenv back from the stack so we can use it in phase 2
+	// TODO(sushi) rewrite stack logic so we dont have to retrieve this again
+	lua.getglobal(lpp_metaenv_stack);
+	const s32 metaenv_stack_idx = lua.gettop();
+	lua.pushinteger(lua.objlen(metaenv_stack_idx));
 
-	lua.pushInteger(stacklen+1);
-	lua.pushValue(-3);
-	lua.setTable(-3);
-	lua.pop();
+	lua.gettable(metaenv_stack_idx);
+	const s32 metaenv_table_idx = lua.gettop();
 
-	if (!lua.setfEnv(-2))
-	{
-		ERROR("failed to set environment of metaprogram\n");
-		return false;
-	}
+	// retrieve the actual metaenv table from the metaenv 
+	// so that processSections may use it 
 
-	if (!lua.pcall())
-	{
-		ERROR("failed to run metaprogram\n");
-		return false;
-	}
+	lua.pushstring("__metaenv"_str);
+	lua.gettable(metaenv_table_idx);
 
-	lua.getGlobal(lpp_metaenv_stack);
-	lua.pushInteger(lua.objLen());
-	lua.getTable(-2);
-	lua.pushString("__metaenv"_str);
-	lua.getTable(-2);
+	// move into phase 2
 
 	if (!ctx->metaenv->processSections())
 		return false;
 
-	lua.pop(2);
+	// pop the metaenv stack
+	lua.pushinteger(lua.objlen(metaenv_stack_idx));
+	lua.pushnil();
+	lua.settable(metaenv_stack_idx);
 
+	// write out the final result
 	output_stream->write(ctx->metaenv->output->cache.asStr());
-	lua.pop();
 
 	return true;
 }
@@ -211,7 +349,7 @@ b8 Lpp::cacheMetaenvironment()
 {
 	DEBUG("caching metaenvironment\n");
 
-	if (!lua.loadFile("src/metaenv.lua"))
+	if (!lua.loadfile("src/metaenv.lua"))
 	{
 		ERROR("failed to load metaenvironment\n");
 		return false;
@@ -282,10 +420,9 @@ struct MetaprogramBuffer
  *  TODO(sushi) this is so dumb, just make this a normal lua C function and pass the result back
  *              as a string.
  */ 
-MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
+LPP_LUAJIT_FFI_FUNC
+MetaprogramBuffer processFile(Lpp* lpp, str path)
 {
-	Lpp* lpp = ctx->lpp;
-
 	auto f = scoped(fs::File::from(path, fs::OpenFlag::Read));
 	if (isnil(f))
 		return {};
@@ -299,7 +436,7 @@ MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
 		return {};
 	defer 
 	{ 
-		lpp->contexts.remove(ctx->list_node);
+		lpp->contexts.remove(((MetaprogramContext*)m)->list_node);
 		lpp->context_pool.remove((MetaprogramContext*)m); 
 	};
 
@@ -325,6 +462,7 @@ MetaprogramBuffer processFile(MetaprogramContext* ctx, str path)
  *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram cannot be retrieved 
  *  for some reason then 'outbuf' should be null. Frees the metaprogram memory in anycase.
  */
+LPP_LUAJIT_FFI_FUNC
 void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
 {
 	if (outbuf)

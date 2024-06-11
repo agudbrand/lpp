@@ -71,5 +71,6 @@ ffi.cdef
 	b8 sectionConsumeFromBeginning(SectionNode* section, u64 len);
 
 	str metaenvironmentGetOutputSoFar(MetaprogramContext* ctx);
+	void metaenvironmentTrackExpansion(MetaprogramContext* ctx, u64 from, u64 to);
 ]]
 

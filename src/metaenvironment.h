@@ -9,6 +9,7 @@
 #include "iro/common.h"
 #include "iro/containers/array.h"
 #include "iro/containers/pool.h"
+#include "iro/containers/linked_pool.h"
 #include "iro/containers/list.h"
 
 #include "source.h"
@@ -20,6 +21,7 @@ using namespace iro;
 
 struct Section;
 struct Cursor;
+struct Expansion;
 
 /* ================================================================================================ Section
  */
@@ -60,6 +62,25 @@ struct Section
 	b8 consumeFromBeginning(u64 len);
 };
 
+
+namespace iro::io
+{
+
+static s64 format(io::IO* io, Section::Kind& kind)
+{
+	switch (kind)
+	{
+#define c(x) case Section::Kind::x: return format(io, STRINGIZE(x));
+	c(Invalid);
+	c(Document);
+	c(Macro);
+#undef c
+		default: return format(io, "INVALID SECTION KIND");
+	}
+}
+
+}
+
 /* ================================================================================================ Cursor
  */
 typedef Pool<Cursor> CursorPool;
@@ -76,14 +97,26 @@ struct Cursor
 	u64 offset; // into current section
 };
 
+/* ================================================================================================ Expansion
+ */
+typedef DLinkedPool<Expansion> ExpansionList;
+
+struct Expansion
+{
+	u64 from;
+	u64 to;
+};
+
 /* ================================================================================================ Metaenvironment
  */
 struct Metaenvironment
 {
-	SectionPool sections;
+	SectionPool sections; // TODO(sushi) convert to DLinkedList
 	SectionList section_list;
 
 	CursorPool  cursors;
+
+	ExpansionList expansions;
 
 	Source* input;
 	Source* output;
@@ -106,6 +139,9 @@ struct Metaenvironment
 	void addMacroSection(s64 start, str indent, u64 macro_idx);
 
 	b8 processSections();
+
+	template<typename... T>
+	b8 errorAt(s32 loc, T... args);
 };
 
 extern "C"

@@ -2,17 +2,16 @@
 
 #include "ctype.h"
 
+static Logger logger = Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
+
 /* ------------------------------------------------------------------------------------------------ Parser::init
  */
 b8 Parser::init(
 		Source* src,
 		io::IO* instream, 
-		io::IO* outstream, 
-		Logger::Verbosity verbosity)
+		io::IO* outstream)
 {
 	assert(instream && outstream);
-
-	logger.init("lpp.parser"_str, verbosity);
 
 	TRACE("initializing on stream '", src->name, "'\n");
 
@@ -60,7 +59,10 @@ b8 Parser::run()
 		using enum Token::Kind;
 
 		if (at(Eof))
+		{
+			TRACE("encountered EOF\n");
 			break;
+		}
 
 		switch (curt->kind)
 		{
@@ -69,8 +71,9 @@ b8 Parser::run()
 
 			case Document:
 				TRACE("placing document text: '", io::SanitizeControlCharacters(getRaw()), "'\n");
-				writeOut("__metaenv.doc("_str, curt->source_location, ",\""_str);
-				// sanitize the document text's control characters into lua's represenatations of them
+				writeOut("__metaenv.doc("_str, curt->loc, ",\""_str);
+				// sanitize the document text's control characters into lua's 
+				// represenatations of them
 				for (u8 c : getRaw())
 				{
 					if (iscntrl(c))
@@ -101,13 +104,16 @@ b8 Parser::run()
 
 			case LuaInline:
 				TRACE("placing lua inline: '", io::SanitizeControlCharacters(getRaw()), "'\n");
-				writeOut("__metaenv.val("_str, curt->source_location, ",", getRaw(), ")\n"_str);
+				writeOut("__metaenv.val("_str, curt->loc, ",", getRaw(), ")\n"_str);
 				nextToken();
 				break;
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
-				writeOut("__metaenv.macro("_str, curt->source_location, ",\"", curt->macro_indentation, "\",");
+				writeOut(
+					"__metaenv.macro("_str, curt->loc, ",\"", 
+					source->getStr(curt->macro_indent_loc, curt->macro_indent_len), 
+					"\",");
 
 				nextToken(); // identifier
 				writeOut(getRaw());
@@ -117,11 +123,16 @@ b8 Parser::run()
 				{
 					for (;;)
 					{
-						writeOut(',', '"', getRaw(), '"');
+						writeOut(',', 
+							"__metaenv.MacroPart.new(",
+							'"', source->name, '"', ',',
+							curt->loc,              ',',
+							curt->loc + curt->len,  ',',
+							'"', getRaw(), '"', ')');
 						nextToken();
 						if (not at(MacroArgumentTupleArg))
 							break;
-						writeOut(',');
+						// writeOut(',');
 					}
 				}
 				else if (at(MacroArgumentString))
