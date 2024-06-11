@@ -5,53 +5,70 @@
 #include "ctype.h"
 #include "assert.h"
 
+static Logger logger = Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
+
+
+
 // ==============================================================================================================
 /* ------------------------------------------------------------------------------------------------ Lexer helpers
  */
-u32 Lexer::current()    { return cursor_codepoint; }
-u8* Lexer::currentptr() { return cursor.bytes - cursor_codepoint.advance; }
+u32 Lexer::current() { return current_codepoint.codepoint; }
 
 b8 Lexer::at(u8 c) { return current() == c; }
-b8 Lexer::eof()    { return at(0) || isnil(cursor_codepoint); }
+b8 Lexer::eof()    { return at_end || at(0) || isnil(current_codepoint); }
 
 b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
 b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
 
+// returns false if we've reached the end of the buffer
+b8 Lexer::readStreamIfNeeded()
+{
+	if (current_offset == source->cache.len)
+	{
+		TRACE("reading more bytes from stream... \n");
+
+		Bytes reserved = source->cache.reserve(128);
+		s64 bytes_read = in->read(reserved);
+		if (bytes_read == -1)
+		{
+			current_codepoint = nil;
+			errorHere("failed to read more bytes from input stream");
+			longjmp(err_handler, 0);
+		}
+		else if (bytes_read == 0)
+		{
+			TRACE("0 bytes read, must be the end of the file...\n");
+			at_end = true;
+			return false;
+		}
+		source->cache.commit(bytes_read);
+		TRACE(bytes_read, " bytes read... chunk is: \n", 
+			source->cache.asStr().sub(current_offset), "\n");
+	}
+	return true;
+}
+
+
+b8 Lexer::decodeCurrent()
+{
+	current_codepoint = 
+		utf8::decodeCharacter(
+			source->cache.buffer + current_offset, 
+			source->cache.len - current_offset);
+
+	return notnil(current_codepoint);
+}
+
 void Lexer::advance(s32 n)
 {
-    auto readStreamIfNeeded = [this]() -> b8
-    {
-        if (source->cache.atEnd() ||
-            cursor.isEmpty())
-        {
-        	Bytes reserved = source->cache.reserve(128);
-            s64 bytes_read = in->read(reserved);
-			if (bytes_read == -1)
-            {
-                cursor_codepoint = nil;
-                errorHere("failed to read more bytes from input stream");
-				longjmp(err_handler, 0);
-            }
-			else if (bytes_read == 0)
-			{
-				cursor_codepoint.codepoint = 0;
-				cursor_codepoint.advance = 1;
-				return false;
-			}
-            source->cache.commit(bytes_read);
-			cursor = str::from(reserved.ptr, bytes_read);
-        }
-		return true;
-    };
-
 	for (s32 i = 0; i < n; i++)
 	{
+		current_offset += current_codepoint.advance;
+
         if (!readStreamIfNeeded())
 			return;
 
-        cursor_codepoint = cursor.advance();
-
-        if (isnil(cursor_codepoint))
+        if (!decodeCurrent())
         {
             errorHere("encountered invalid codepoint!");
             longjmp(err_handler, 0);
@@ -76,13 +93,40 @@ void Lexer::skipWhitespace()
 		advance();
 }
 
+/* ------------------------------------------------------------------------------------------------ Lexer::errorAt
+ */
+template<typename... T>
+b8 Lexer::errorAt(s32 line, s32 column, T... args)
+{
+	ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
+	return false;
+}
+
+/* ------------------------------------------------------------------------------------------------ Lexer::errorAtToken
+ */
+template<typename... T>
+b8 Lexer::errorAtToken(Token& t, T... args)
+{
+	source->cacheLineOffsets();
+	Source::Loc loc = source->getLoc(t.loc);
+	return errorAt(loc.line, loc.column, args...);
+}
+
+/* ------------------------------------------------------------------------------------------------ Lexer::errorHere
+ */
+template<typename... T>
+b8 Lexer::errorHere(T... args)
+{
+	source->cacheLineOffsets();
+	Source::Loc loc = source->getLoc(current_offset);
+	return errorAt(loc.line, loc.column, args...);
+}
+
 /* ------------------------------------------------------------------------------------------------ Lexer::init
  */
-b8 Lexer::init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity)
+b8 Lexer::init(io::IO* input_stream, Source* src)
 {
-    assert(input_stream);
-
-    logger.init("lpp.lexer"_str, verbosity);
+    assert(input_stream and src);
 
     TRACE("initializing with input stream '", src->name, "'\n");
 	SCOPED_INDENT;
@@ -90,8 +134,13 @@ b8 Lexer::init(io::IO* input_stream, Source* src, Logger::Verbosity verbosity)
 	tokens = TokenArray::create();
     in = input_stream;
 	source = src;
+	at_end = false;
+	current_offset = 0;
+	current_codepoint = nil;
 
-    advance();
+	// prep buffer and current
+	readStreamIfNeeded();
+	decodeCurrent();
 
 	return true;
 }
@@ -117,24 +166,28 @@ b8 Lexer::run()
 		initCurt();
 		skipWhitespace();
 
-		str trailing_space = nil;
+		s32 trailing_space_start = 0;
+		s32 trailing_space_len = 0;
 
 		while (not at('@') and
 			   not at('$') and
 			   not eof())
 		{
 
-			if (isnil(trailing_space))
+			if (trailing_space_len == 0)
 			{
 				if (isspace(current()) and not at('\n'))
-					trailing_space = {currentptr(), cursor_codepoint.advance};
+				{
+					trailing_space_start = current_offset;
+					trailing_space_len = current_codepoint.advance;
+				}
 			}
 			else
 			{
 				if (at('\n') or not isspace(current()))
-					trailing_space = nil;
+					trailing_space_len = 0;
 				else
-					trailing_space.len += cursor_codepoint.advance;
+					trailing_space_len += current_codepoint.advance;
 			}
 
 			advance();
@@ -192,7 +245,8 @@ b8 Lexer::run()
 				{
 					advance();
 					if (eof()) 
-						return errorAtToken(curt, "unexpected eof while consuming inline lua expression");
+						return errorAtToken(curt, 
+								"unexpected eof while consuming inline lua expression");
 					
 					if (at('(')) 
 						nesting += 1;
@@ -224,9 +278,9 @@ b8 Lexer::run()
 				if (tokens.len() != 0)
 				{
 					Token* last = tokens.arr + tokens.len() - 2;
-					str raw = source->getStr(last->source_location, last->length);
-					while (isspace(raw.bytes[last->length-1]) && raw.bytes[last->length-1] != '\n')
-						last->length -= 1;
+					str raw = last->getRaw(source);
+					while (isspace(raw.bytes[last->len-1]) && raw.bytes[last->len-1] != '\n')
+						last->len -= 1;
 				}
 			}
 		}
@@ -234,7 +288,8 @@ b8 Lexer::run()
 		{
 			initCurt();
 			advance();
-			curt.macro_indentation = trailing_space;
+			curt.macro_indent_loc = trailing_space_start;
+			curt.macro_indent_len = trailing_space_len;
 			finishCurt(MacroSymbol);
 
 			skipWhitespace();
@@ -278,7 +333,8 @@ b8 Lexer::run()
 						advance();
 
 					if (eof())
-						return errorAtToken(curt, "unexpected end of file while consuming macro arguments");
+						return errorAtToken(curt, 
+								"unexpected end of file while consuming macro arguments");
 
 					finishCurt(MacroArgumentTupleArg);
 
@@ -301,7 +357,8 @@ b8 Lexer::run()
 				{
 					advance();
 					if (eof())
-						return errorAtToken(curt, "unexpected end of file while consuming macro string argument");
+						return errorAtToken(curt, 
+								"unexpected end of file while consuming macro string argument");
 
 					if (at('"'))
 						break;
@@ -325,19 +382,21 @@ b8 Lexer::run()
 void Lexer::initCurt()
 {
 	curt.kind = Token::Kind::Eof;
-	curt.source_location = currentptr() - source->cache.buffer;
+	curt.loc = current_offset;
 }
 
 /* ------------------------------------------------------------------------------------------------ Lexer::finishToken
  */
 void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 {
-	s32 len = len_offset + (currentptr() - source->cache.buffer) - curt.source_location;
+	s32 len = len_offset + current_offset - curt.loc;
 	if (len > 0)
 	{
 		curt.kind = kind;
-		curt.length = len;
+		curt.len = len;
 		tokens.push(curt);
+
+		TRACE("finished ", curt, "\n");
 	}
 }
 
