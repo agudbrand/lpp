@@ -1,0 +1,11 @@
+
+struct Apple
+{
+	int leaves;
+	float nutrients;
+
+$ if DEBUG then -- globals should be imported from importing file
+	str dbg_name;
+$ end
+
+};	

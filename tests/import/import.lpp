@@ -1,0 +1,22 @@
+$$$
+
+local lpp = require "lpp"
+local import = require "import"
+
+DEBUG = true
+
+$$$
+
+@import "apple.lpp"
+
+$ if not DEBUG then
+@import "banana.lpp"
+$ end 
+
+@import "orange.lpp"
+
+int main()
+{
+	Apple apple;
+}
+

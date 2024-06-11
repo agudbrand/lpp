@@ -1,0 +1,21 @@
+$$$
+
+local List = require "list"
+
+local log = function(...)
+	local out = "print("
+	List{...}:each(function(arg)
+		out = out..arg..", "
+	end)
+	return out..");\n"
+end
+
+$$$
+
+int main()
+{
+	@log(
+		1, 
+		2, 
+		3)
+}

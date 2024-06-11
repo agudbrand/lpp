@@ -1,0 +1,11 @@
+struct Orange
+{
+	float skin_thickness;
+};
+
+void traceOrange(Orange* orange)
+{
+$ if DEBUG then
+	printf("skin_thickness: %f\n", orange->skin_thickness);
+$end
+}
