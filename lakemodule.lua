@@ -15,7 +15,9 @@ local report  = assert(options.report)
 local reports = assert(options.reports)
 local recipes = assert(options.recipes)
 
-assert(reports.iro.objFiles, "lpp depends on iro's object files but they were not found in the reports table. Was iro's module imported? Maybe it was imported after this one.")
+assert(reports.iro.objFiles, "lpp depends on iro's object files but they were not found in the "..
+                             "reports table. Was iro's module imported? Maybe it was imported "..
+							 "after this one.")
 
 local lpp = lake.target(build_dir.."lpp")
 
@@ -24,7 +26,8 @@ report.executable(tostring(lpp))
 local cflags = List
 {
 	"-Isrc",
-	options.getProjIncludeDirFlags "iro"
+	options.getProjIncludeDirFlags "iro",
+	"-fvisibility=hidden"
 }
 
 if mode == "debug" then
@@ -33,10 +36,17 @@ else
 	cflags:push "-O2"
 end
 
+-- TODO(sushi) once i get around to more stuff using this (if ever, eg. if it is replaced by lpp)
+--             setup communicating these defines between projects instead of hardcoding it 
+--             like this
+if lake.os() == "Linux" then
+	cflags:push "-DIRO_LINUX=1"
+end
+
 local lflags = List
 {
 	options.getProjLibs "luajit",
-	"-Wl,--dynamic-list=src/exportedsymbols",
+	"-Wl,-E",
 }
 
 if reports.lppclang then
@@ -52,7 +62,7 @@ for c_file in c_files:each() do
 	report.objFile(o_file)
 
 	lake.target(o_file)
-		:dependsOn(c_file)
+		:dependsOn { c_file, options.this_file }
 		:recipe(recipes.compiler(c_file, o_file, cflags))
 
 	lake.target(d_file)
@@ -61,6 +71,20 @@ for c_file in c_files:each() do
 end
 
 local ofiles = lake.flatten { reports.lpp.objFiles, reports.iro.objFiles }
+
+
+lake.find("src/*.lua"):each(function(lfile)
+	local ofile = lfile:gsub("(.-)%.lua", build_dir.."%1.lua.o")
+	report.objFile(ofile)
+
+	ofiles:push(ofile)
+
+	lpp:dependsOn(ofile)
+	
+	lake.target(ofile)
+		:dependsOn { lfile, options.this_file }
+		:recipe(recipes.luaToObj(lfile, ofile))
+end)
 
 lpp:dependsOn(ofiles):recipe(recipes.linker(ofiles, lpp, lflags))
 
