@@ -42,8 +42,14 @@ typedef struct DeclIter DeclIter;
 typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
-Decl* testIncParse(str s);
+typedef struct
+{
+ str raw;
+ u64 start_offset;
+ u64 end_offset;
+} TokenRawAndLoc;
 void addIncludeDir(Context* ctx, str s);
+Type* lookupType(Context* ctx, str name);
 Context* createContext();
 void destroyContext(Context*);
 Lexer* createLexer(Context* ctx, str s);
@@ -91,10 +97,11 @@ u64 getFieldOffset(Context* ctx, Decl* field);
 EnumIter* createEnumIter(Context* ctx, Decl* decl);
 Decl* getNextEnum(EnumIter* iter);
 void dumpAST(Context* ctx);
-str getClangDeclSpelling(Decl* decl);]]
+str getClangDeclSpelling(Decl* decl);
+]]
 
 -- set to the lpp object when loaded
-local lpp 
+local lpp = require "lpp"
 
 -- contains the shared library when loaded 
 local lppclang
@@ -164,7 +171,35 @@ end
 ---@param code string
 ---@return Decl
 Ctx.parseString = function(self, code)
-	return Decl.new(self, assert(lppclang.parseString(self.handle, make_str(code)), "failed to parse given string!"))
+	return Decl.new(self,
+		assert(lppclang.parseString(self.handle, make_str(code)),
+			"failed to parse given string!"))
+end
+
+--- Lex a given string using this context. Note that this does NOT parse
+--- the string. This uses a 'raw' lexer, which means that it literally 
+--- just gives tokens, no preprocessing or anything like that is done.
+---
+---@param code string
+---@return Lexer
+Ctx.lexString = function(self, code)
+	return Lexer.new(self,
+		assert(lppclang.createLexer(self.handle, make_str(code)),
+			"failed to create a Lexer for code \n"..code))
+end
+
+--- Lex a given section. This will automatically consume the section 
+--- as tokens are retrieved. 
+---
+-- TODO(sushi) add an options table to thit
+---
+---@param section Section
+---@return Lexer
+Ctx.lexSection = function(self, section)
+	local lex = self:lexString(make_str(assert(section:getString())))
+	lex.section = section
+	lex.consume = true
+	return lex
 end
 
 --- Add a path to the include search list.
@@ -452,21 +487,31 @@ EnumIter.next = function(self)
 	return Decl.new(self.ast, ne)
 end
 
+--- An instance of a clang Lexer over some string.
+---
+---@class Lexer
+---@field ctx Ctx
+---@field handle userdata 
+---@field curt userdata
+---@field section Section
+---@field consume boolean
+---@field keep_whitespace boolean
 Lexer = {}
 Lexer.__index = Lexer
 
-Lexer.new = function(ctx, l)
-	assert(ctx and l)
+Lexer.new = function(ctx, handle)
+	assert(ctx and handle)
 
-	local o = setmetatable({}, Lexer)
-	o.ctx = ctx
-	o.lex = l
-	o.curt = nil
-	return o
+	return setmetatable(
+	{
+		ctx=ctx,
+		handle=handle,
+		curt=nil,
+	}, Lexer)
 end
 
 Lexer.next = function(self)
-	self.curt = lppclang.lexerNextToken(self.lex)
+	self.curt = lppclang.lexerNextToken(self.handle)
 	if self.curt ~= nil then
 		if self.section and self.consume then
 			self.section:consumeFromBeginning(#self:curtRaw())
@@ -479,7 +524,7 @@ Lexer.next = function(self)
 end
 
 Lexer.curtRaw = function(self)
-	return strToLua(lppclang.tokenGetRaw(self.ctx, self.lex, self.curt))
+	return strToLua(lppclang.tokenGetRaw(self.ctx.handle, self.handle, self.curt))
 end
 
 Lexer.eof = 0
@@ -576,10 +621,9 @@ local loaded = false
 return
 {
 
-	init = function(lpp_in, libpath)
+	init = function(libpath)
 		if loaded then return true end
 
-		lpp = lpp_in
 		lppclang = ffi.load(libpath)
 
 		-- patch lpp with the clang module

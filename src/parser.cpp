@@ -124,7 +124,7 @@ b8 Parser::run()
 					for (;;)
 					{
 						writeOut(',', 
-							"__metaenv.MacroPart.new(",
+							"__metaenv.lpp.MacroPart.new(",
 							'"', source->name, '"', ',',
 							curt->loc,              ',',
 							curt->loc + curt->len,  ',',

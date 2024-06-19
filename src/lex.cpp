@@ -5,7 +5,7 @@
 #include "ctype.h"
 #include "assert.h"
 
-static Logger logger = Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
+static Logger logger = Logger::create("lpp.lexer"_str, Logger::Verbosity::Trace);
 
 
 

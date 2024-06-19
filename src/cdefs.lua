@@ -1,5 +1,5 @@
 --
--- This can only be done once, so I've moved it out of the metaenvironment file.
+-- This can only be done once, so I've moved it out of the metaprogram file.
 --
 
 local ffi = require "ffi"
@@ -37,17 +37,17 @@ ffi.cdef
 	MetaprogramBuffer processFile(void* ctx, str path);
 	void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf);
 
-	typedef struct MetaprogramContext MetaprogramContext;
+	typedef struct Metaprogram Metaprogram;
 	typedef struct Cursor Cursor;
 	typedef struct SectionNode SectionNode;
 
-	void metaenvironmentAddMacroSection(MetaprogramContext* ctx, str indentation, u64 start, u64 macro_idx);
-	void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
+	void metaprogramAddMacroSection(Metaprogram* ctx, str indentation, u64 start, u64 macro_idx);
+	void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, str s);
 
-	Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
-	void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor);
+	Cursor* metaprogramNewCursorAfterSection(Metaprogram* ctx);
+	void metaprogramDeleteCursor(Metaprogram* ctx, Cursor* cursor);
 
-	str metaenvironmentGetMacroIndent(MetaprogramContext* ctx);
+	str metaprogramGetMacroIndent(Metaprogram* ctx);
 
 	b8  cursorNextChar(Cursor* cursor);
 	b8  cursorNextSection(Cursor* cursor);
@@ -56,7 +56,7 @@ ffi.cdef
 	str cursorGetRestOfSection(Cursor* cursor);
 	SectionNode* cursorGetSection(Cursor* cursor);
 
-	SectionNode* metaenvironmentGetNextSection(MetaprogramContext* ctx);
+	SectionNode* metaprogramGetNextSection(Metaprogram* ctx);
 
 	SectionNode* sectionNext(SectionNode* section);
 	SectionNode* sectionPrev(SectionNode* section);
@@ -70,7 +70,7 @@ ffi.cdef
 
 	b8 sectionConsumeFromBeginning(SectionNode* section, u64 len);
 
-	str metaenvironmentGetOutputSoFar(MetaprogramContext* ctx);
-	void metaenvironmentTrackExpansion(MetaprogramContext* ctx, u64 from, u64 to);
+	str metaprogramGetOutputSoFar(Metaprogram* ctx);
+	void metaprogramTrackExpansion(Metaprogram* ctx, u64 from, u64 to);
 ]]
 

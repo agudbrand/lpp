@@ -7,7 +7,6 @@
 --
 --
 
-
 local ffi = require "ffi"
 local C = ffi.C
 
@@ -28,10 +27,12 @@ return function(ctx)
 	M.__metaenv = {}
 	local menv = M.__metaenv
 
+	menv.lpp = require "lpp"
+
 	menv.macro_table = {}
 
 	menv.doc = function(start, str)
-		C.metaenvironmentAddDocumentSection(ctx, start, makeStr(str))
+		C.metaprogramAddDocumentSection(ctx, start, makeStr(str))
 	end
 
 	menv.val = function(start, x)
@@ -42,7 +43,8 @@ return function(ctx)
 		if not s then
 			error("result of inline lua expression is not convertible to a string", 2)
 		end
-		C.metaenvironmentAddDocumentSection(ctx, start, makeStr(s))
+		print("adding doc ", x)
+		C.metaprogramAddDocumentSection(ctx, start, makeStr(s))
 	end
 
 	menv.macro = function(start, indent, m, ...)
@@ -56,7 +58,7 @@ return function(ctx)
 		-- I'll need to profile this stuff later to see
 		-- if it has horrible effects
 		table.insert(menv.macro_table, function() return m(unpack(args)) end)
-		C.metaenvironmentAddMacroSection(ctx, makeStr(indent), start, #menv.macro_table)
+		C.metaprogramAddMacroSection(ctx, makeStr(indent), start, #menv.macro_table)
 	end
 
 	return M

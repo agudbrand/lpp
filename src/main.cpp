@@ -11,6 +11,8 @@
 
 #include "iro/logger.h"
 
+#include "string.h"
+
 #include "iro/process.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
@@ -25,7 +27,54 @@ DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
 #include "generated/cliargs.h"
 
-int main(int argc, char** argv) 
+// TODO(sushi) this is currently shared between here and lake.cpp, it should be moved to an arg helper
+//             in iro.
+struct ArgIter
+{
+	const char** argv = nullptr;
+	u64 argc = 0;
+	u64 idx = 0;
+
+	str current = nil;
+
+	ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
+	{  
+		idx = 1;
+		next();
+	}
+
+	void next()
+	{
+		if (idx == argc)
+		{
+			current = nil;
+			return;
+		}
+
+		current = { (u8*)argv[idx++] };
+		current.len = strlen((char*)current.bytes);
+	}
+};
+
+b8 processArgv(int argc, const char** argv, str* out_file)
+{
+	for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
+	{
+		str arg = iter.current;
+		if (arg.bytes[0] == '-')
+		{
+			io::formatv(&fs::stdout, 
+				"error: arguments other than the processed file are not supported yet.");
+			return false;
+		}
+
+		*out_file = arg;
+		break;
+	}
+	return true;
+}
+
+int main(int argc, const char** argv) 
 {
 	iro::log.init();
 	defer { iro::log.deinit(); };
@@ -44,45 +93,45 @@ int main(int argc, char** argv)
 				PrefixNewlines);
 	}
 
+	// TODO(sushi) actual cli args in lpp, especially when we get to supporting an lsp 
+	str file = nil;
+	if (!processArgv(argc, argv, &file))
+		return 1;
+
+	if (isnil(file))
+	{
+		FATAL("no input file\n");
+		return 1;
+	}
+
 	Lpp lpp = {}; 
 	if (!lpp.init())
 		return 1;
 	// defer { lpp.deinit(); };
 	
-	auto cwd = scoped(fs::Path::cwd());
-	auto testdir = scoped(fs::Path::from("tests/import"_str));
-
-	testdir.chdir();
-
-	str testpath = "import.lpp"_str;
-
-	auto testlpp = scoped(fs::File::from(testpath, fs::OpenFlag::Read));
-	if (isnil(testlpp))
+	auto filehandle = scoped(fs::File::from(file, fs::OpenFlag::Read));
+	if (isnil(filehandle))
 		return 1;
 
 	io::Memory mp;
 	mp.open();
 
-	Metaprogram m = lpp.createMetaprogram(testpath, &testlpp, &mp);
-	if (!m)
-		return 1;
-
-	INFO(mp.asStr());
-
-	io::Memory result;
-	result.open();
-
-	if (!lpp.runMetaprogram(m, &mp, &result))
-		return 1;
-
-	cwd.chdir();
-
+	io::IO* out = nullptr;
+	
 	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
+	auto outclose = deferWithCancel { outfile.close(); };
 	if (notnil(outfile))
 	{
-		outfile.write(result.asStr());
-		outfile.close();
+		out = &outfile;
 	}
+	else
+	{
+		outclose.cancel();
+		out = &fs::stdout;
+	}
+
+	if (!lpp.processStream(file, &filehandle, &outfile))
+		return 1;
 
 	return 0;
 }

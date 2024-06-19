@@ -3,8 +3,8 @@
  *  its final output.
  */
 
-#ifndef _lpp_metaenvironment_h
-#define _lpp_metaenvironment_h
+#ifndef _lpp_metaprogram_h
+#define _lpp_metaprogram_h
 
 #include "iro/common.h"
 #include "iro/containers/array.h"
@@ -25,9 +25,8 @@ struct Expansion;
 
 /* ================================================================================================ Section
  */
-typedef Pool<Section> SectionPool;
-typedef DList<Section> SectionList;
-typedef SectionList::Node SectionNode;
+typedef DLinkedPool<Section> SectionPool;
+typedef SectionPool::Node SectionNode;
 
 struct Section
 {
@@ -107,21 +106,19 @@ struct Expansion
 	u64 to;
 };
 
-/* ================================================================================================ Metaenvironment
+/* ================================================================================================
  */
-struct Metaenvironment
+struct Metaprogram
 {
-	SectionPool sections; // TODO(sushi) convert to DLinkedList
-	SectionList section_list;
+	Lpp* lpp;
 
-	CursorPool  cursors;
-
+	SectionPool   sections;
+	CursorPool    cursors;
 	ExpansionList expansions;
 
+	io::IO* instream;
 	Source* input;
 	Source* output;
-
-	Lpp* lpp;
 
 	SectionNode* current_section;
 
@@ -130,8 +127,14 @@ struct Metaenvironment
 	=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
-	b8   init(Lpp* lpp, Source* input, Source* output);
+	b8   init(Lpp* lpp, io::IO* instream, Source* input, Source* output);
 	void deinit();
+
+	b8 run();
+
+	b8 phase1();
+	b8 phase2();
+	b8 phase3();
 
 	Section* insertSection(u64 idx);
 
@@ -147,29 +150,10 @@ struct Metaenvironment
 extern "C"
 {
 
-void metaenvironmentAddMacroSection(MetaprogramContext* ctx, str indentation, u64 start, u64 macro_idx);
-void metaenvironmentAddDocumentSection(MetaprogramContext* ctx, u64 start, str s);
-
-Cursor* metaenvironmentNewCursorAfterSection(MetaprogramContext* ctx);
-void metaenvironmentDeleteCursor(MetaprogramContext* ctx, Cursor* cursor);
-
-b8  cursorNextChar(Cursor* cursor);
-b8  cursorNextSection(Cursor* cursor);
-u32 cursorCurrentCodepoint(Cursor* cursor);
-b8  cursorInsertString(Cursor* cursor, str text);
-str cursorGetRestOfSection(Cursor* cursor);
-SectionNode* cursorGetSection(Cursor* cursor);
-
-SectionNode* metaenvironmentGetNextSection(MetaprogramContext* ctx);
-
-SectionNode* sectionNext(SectionNode* section);
-SectionNode* sectionPrev(SectionNode* section);
-
-b8 sectionIsMacro(SectionNode* section);
-b8 sectionIsDocument(SectionNode* section);
-
-b8 sectionInsertString(SectionNode* section, u64 offset, str s);
+	// TODO(sushi) maybe someday put the lua api here.
+	//             Its really not necessary and is just another place I have 
+	//             to update declarations at.
 
 }
 
-#endif // _lpp_metaenvironment_h
+#endif // _lpp_metaprogram_h

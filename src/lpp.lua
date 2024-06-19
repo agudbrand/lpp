@@ -52,7 +52,7 @@ local lpp = {}
 ---
 ---@return string
 lpp.getMacroIndentation = function()
-	return strToLua(C.metaenvironmentGetMacroIndent(lpp.context))
+	return strToLua(C.metaprogramGetMacroIndent(lpp.context))
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -81,9 +81,9 @@ end
 ---
 ---@return Section?
 lpp.getSectionAfterMacro = function()
-	local s = C.metaenvironmentGetNextSection(lpp.context)
+	local s = C.metaprogramGetNextSection(lpp.context)
 	if s ~= nil then
-		return s
+		return Section.new(s)
 	end
 end
 
@@ -93,7 +93,7 @@ end
 ---
 ---@return string
 lpp.getOutputSoFar = function()
-	return strToLua(C.metaenvironmentGetOutputSoFar(lpp.context))
+	return strToLua(C.metaprogramGetOutputSoFar(lpp.context))
 end
 
 -- * ==============================================================================================
@@ -271,7 +271,7 @@ MacroExpansion.__call = function(self, offset)
 	self.list:each(function(x)
 		if MacroPart.isTypeOf(x)
 		then
-			C.metaenvironmentTrackExpansion(lpp.context, x.start, offset + #out)
+			C.metaprogramTrackExpansion(lpp.context, x.start, offset + #out)
 			out:put(tostring(x))
 		else
 			out:put(x)
