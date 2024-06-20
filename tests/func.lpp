@@ -1,0 +1,9 @@
+$ local Array = function(T)
+	struct Array_$(T) 
+	{
+		$(T)* ptr;
+		u32 count;
+	};
+$  end
+
+$ Array "int"
