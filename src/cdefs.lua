@@ -72,5 +72,6 @@ ffi.cdef
 
 	str metaprogramGetOutputSoFar(Metaprogram* ctx);
 	void metaprogramTrackExpansion(Metaprogram* ctx, u64 from, u64 to);
+	s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line);
 ]]
 

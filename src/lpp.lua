@@ -45,6 +45,13 @@ local lpp = {}
 
 -- * ----------------------------------------------------------------------------------------------
 
+local lua_error = error
+error = function(msg)
+	lua_error(msg, 0)
+end
+
+-- * ----------------------------------------------------------------------------------------------
+
 --- Get the indentation of the current macro as a string.
 ---
 --- Good for keeping things nicely formatted in macro expansions that span multiple 

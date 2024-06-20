@@ -1,11 +1,12 @@
 #include "metaprogram.h"
 #include "lpp.h"
 
+#include "iro/linemap.h"
 #include "iro/fs/file.h"
 
 static Logger logger = Logger::create("lpp.metaprog"_str, Logger::Verbosity::Trace);
 
-/* ------------------------------------------------------------------------------------------------ Section::initDocument
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
 {
@@ -18,7 +19,7 @@ b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Section::initMacro
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Section::initMacro(u64 start_offset_, str macro_indent_, u64 macro_idx_, SectionNode* node_)
 {
@@ -30,7 +31,7 @@ b8 Section::initMacro(u64 start_offset_, str macro_indent_, u64 macro_idx_, Sect
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Section::deinit
+/* ------------------------------------------------------------------------------------------------ 
  */
 void Section::deinit()
 {
@@ -47,7 +48,7 @@ void Section::deinit()
 	node = nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------ Section::insertString
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Section::insertString(u64 offset, str s)
 {
@@ -62,7 +63,7 @@ b8 Section::insertString(u64 offset, str s)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Section::consumeFromBeginning
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Section::consumeFromBeginning(u64 len)
 {
@@ -82,7 +83,7 @@ b8 Section::consumeFromBeginning(u64 len)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Metaprogram::init
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
 {
@@ -90,35 +91,107 @@ b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
 	this->instream = instream;
 	this->input = input;
 	this->output = output;
-	sections.init();
+	input_line_map = Array<InputLineMapping>::create();
+	if (!buffers.init())
+		return false;
+	if (!sections.init())
+		return false;
+	if (!scope_stack.init())
+		return false;
+	if (!expansions.init())
+		return false;
 	cursors = CursorPool::create();
-	expansions.init();
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Metaprogram::deinit
+/* ------------------------------------------------------------------------------------------------
  */
 void Metaprogram::deinit()
 {
+	input_line_map.destroy();
 	sections.deinit();
+	for (auto& scope : scope_stack)
+		scope.deinit();
+	scope_stack.deinit();
 	cursors.destroy();
 	expansions.deinit();
+	buffers.deinit();
 	*this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------ Metaprogram::addDocumentSection
+/* ------------------------------------------------------------------------------------------------
+ */
+b8 Scope::init(Scope* prev, io::Memory* buffer, Section* macro_invocation)
+{
+	this->prev = prev;
+	this->buffer = buffer;
+	this->macro_invocation = macro_invocation;
+	sections = SectionList::create();
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+void Scope::deinit()
+{
+	sections.destroy();
+	*this = {};
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+Scope* Metaprogram::pushScope()
+{
+	auto current = scope_stack.headNode();
+	auto node = scope_stack.push();
+	auto scope = node->data;
+
+	auto buffer = buffers.push()->data;
+	if (!buffer->open())
+		return nullptr;
+	
+	Section* macro_invocation = nullptr;
+	if (current_section && current_section->data->kind == Section::Kind::Macro)
+		macro_invocation = current_section->data;
+
+	if (!scope->init(
+			(current? current->data : nullptr), 
+			buffer, 
+			macro_invocation))
+		return nullptr;
+
+	return scope;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+void Metaprogram::popScope()
+{
+	scope_stack.pop();
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+Scope* Metaprogram::getCurrentScope()
+{
+	return &scope_stack.head();
+}
+
+/* ------------------------------------------------------------------------------------------------
  */
 void Metaprogram::addDocumentSection(u64 start, str raw)
 {
-	auto node = sections.pushTail();
+	auto node = getCurrentScope()->sections.pushTail();
+	node->data = sections.pushTail()->data;
 	node->data->initDocument(start, raw, node);
 }
 
-/* ------------------------------------------------------------------------------------------------ Metaprogram::addMacroSection
+/* ------------------------------------------------------------------------------------------------
  */
 void Metaprogram::addMacroSection(s64 start, str indent, u64 macro_idx)
 {
-	auto node = sections.pushTail();
+	auto node = getCurrentScope()->sections.pushTail();
+	node->data = sections.pushTail()->data;
 	node->data->initMacro(start, indent, macro_idx, node);
 }
 
@@ -129,7 +202,8 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
 
 	Source::Loc old = input->getLoc(expansion.from);
 	Source::Loc nu  = output->getLoc(expansion.to);
-	INFO(old.line, ":", old.column, "(", expansion.from, ") -> ", nu.line, ":", nu.column, "(", expansion.to, ")\n");
+	INFO(old.line, ":", old.column, "(", expansion.from, ") -> ", 
+		 nu.line, ":", nu.column, "(", expansion.to, ")\n");
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -142,6 +216,13 @@ b8 Metaprogram::run()
 
 	const s32 bottom = lua.gettop();
 	defer { lua.settop(bottom); };
+
+	if (!lua.require("errhandler"_str))
+	{
+		ERROR("failed to load errhandler moduln");
+		return false;
+	}
+	I.errhandler = lua.gettop();
 
 	// The parsed program, to be executed in phase 2.
 	// TODO(sushi) get this to incrementally stream from the parser 
@@ -172,11 +253,35 @@ b8 Metaprogram::run()
 
 	DEBUG(parsed_program.asStr(), "\n");
 
+	{
+		auto f = scoped(fs::File::from("temp/parsed"_str, fs::OpenFlag::Create | fs::OpenFlag::Write | fs::OpenFlag::Truncate));
+		f.write(parsed_program.asStr());
+	}
+
+	Source temp;
+	temp.init("temp"_str);
+	temp.writeCache(parsed_program.asStr());
+	temp.cacheLineOffsets();
+	for (auto& exp : parser.locmap)
+	{	
+		Source::Loc to = input->getLoc(exp.to);
+		Source::Loc from = temp.getLoc(exp.from);
+		input_line_map.push(
+			{
+				.metaprogram = s32(from.line),
+				.input = s32(to.line)
+			});
+	}
+
 	// ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 2
 	
 	DEBUG("phase 2\n");
 
 	// Execute the lua metacode to form the sections we process in the following phase.
+
+	TRACE("creating global scope\n");
+	pushScope();
+	defer { popScope(); };
 
 	TRACE("loading parsed program\n");
 	if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.bytes))
@@ -184,7 +289,7 @@ b8 Metaprogram::run()
 		ERROR("failed to load metaprogram into lua\n");
 		return false;
 	}
-	const s32 I_metaprogram = lua.gettop();
+	I.metaprogram = lua.gettop();
 
 	// Get the metaenvironment construction function and call it to 
 	// make a new env.
@@ -201,7 +306,7 @@ b8 Metaprogram::run()
 		ERROR("metaenvironment construction function failed\n");
 		return false;
 	}
-	const s32 I_metaenv = lua.gettop();
+	I.metaenv = lua.gettop();
 
 	// NOTE(sushi) I used to do a thing here where the global environment of the 
 	//             previous metaenvironment (if any, as in the case of processing 
@@ -221,38 +326,38 @@ b8 Metaprogram::run()
 		ERROR("failed to get lpp module for setting metaprogram context\n");
 		return false;
 	}
-	const s32 I_lpp = lua.gettop();
+	I.lpp = lua.gettop();
 
 	// Save the old context.
 	lua.pushstring("context"_str);
-	lua.gettable(I_lpp);
-	const s32 I_prev_context = lua.gettop();
+	lua.gettable(I.lpp);
+	I.prev_context = lua.gettop();
 
 	// Ensure the context is restored.
 	defer 
 	{
 		lua.pushstring("context"_str);
-		lua.pushvalue(I_prev_context);
-		lua.settable(I_lpp);
+		lua.pushvalue(I.prev_context);
+		lua.settable(I.lpp);
 	};
 
 	// Set the new context.
 	lua.pushstring("context"_str);
 	lua.pushlightuserdata(this);
-	lua.settable(I_lpp);
+	lua.settable(I.lpp);
 
 	// Finally set the metaenvironment of the metacode and call it.
 	TRACE("setting environment of metaprogram\n");
-	lua.pushvalue(I_metaenv);
-	if (!lua.setfenv(I_metaprogram))
+	lua.pushvalue(I.metaenv);
+	if (!lua.setfenv(I.metaprogram))
 	{
 		ERROR("failed to set environment of metaprogram\n");
 		return false;
 	}
 
 	TRACE("executing metaprogram\n");
-	lua.pushvalue(I_metaprogram);
-	if (!lua.pcall())
+	lua.pushvalue(I.metaprogram);
+	if (!lua.pcall(0,0,I.errhandler))
 	{
 		ERROR("failed to execute generated metaprogram\n");
 		return false;
@@ -268,29 +373,56 @@ b8 Metaprogram::run()
 	// Retrieve MacroExpansion.isTypeOf
 	TRACE("getting MacroExpansion.isTypeOf\n");
 	lua.pushstring("MacroExpansion"_str);
-	lua.gettable(I_lpp);
+	lua.gettable(I.lpp);
 	const s32 I_MacroExpansion = lua.gettop();
 
 	lua.pushstring("isTypeOf"_str);
 	lua.gettable(I_MacroExpansion);
-	const s32 I_MacroExpansion_isTypeOf = lua.gettop();
+	I.MacroExpansion_isTypeOf = lua.gettop();
 
 	// Retrieve the __metaenv table.
 	TRACE("getting '__metaenv'\n");
 	lua.pushstring("__metaenv"_str);
-	lua.gettable(I_metaenv);
-	const s32 I_metaenv_table = lua.gettop();
+	lua.gettable(I.metaenv);
+	I.metaenv_table = lua.gettop();
 
 	// Get the metaenv's macro table.
 	TRACE("getting metaenvironment's macro table\n");
 	lua.pushstring("macro_table"_str);
-	lua.gettable(I_metaenv_table);
-	const s32 I_macro_table = lua.gettop();
+	lua.gettable(I.metaenv_table);
+	I.macro_table = lua.gettop();
+
+	TRACE("processing global scope\n");
+
+	if (!processScopeSections(getCurrentScope()))
+		return false;
+
+	output->writeCache(getCurrentScope()->buffer->asStr());
+
+	output->cacheLineOffsets();
+
+	for (auto& expansion : expansions)
+	{
+		printExpansion(input, output, expansion);
+	}
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
+b8 Metaprogram::processScopeSections(Scope* scope)
+{
+	using enum Section::Kind;
+
+	LuaState& lua = lpp->lua;
 
 	// Loop over each section, joining document sections and expanded macros.
-	TRACE("beginning section loop\n");
+
+	TRACE("processing scope sections\n");
+
 	u64 section_idx = 0;
-	for (current_section = sections.headNode();
+	for (current_section = scope->sections.head;
 		 current_section;
 		 current_section = current_section->next)
 	{
@@ -304,27 +436,43 @@ b8 Metaprogram::run()
 		case Document:
 			TRACE("found Document section\n");
 			// Simple write to the output cache.
-			output->writeCache(section->mem.asStr());
+			scope->writeBuffer(section->mem.asStr());
 			break;
 
 		case Macro:
 			{
 				TRACE("found Macro section\n");
+				SectionList::Node* save = current_section;
+				defer { current_section = save; };
+
+				// Create a new Scope for the macro.
+				Scope* macro_scope = pushScope();
+				if (!macro_scope)
+					return false;
+				defer { popScope(); };
+
 				// Get the macro and execute it.
 				lua.pushinteger(section->macro_idx);
-				lua.gettable(I_macro_table);
+				lua.gettable(I.macro_table);
 				const s32 I_macro = lua.gettop();
 
 				TRACE("invoking macro\n");
-				if (!lua.pcall(0, 1))
+				if (!lua.pcall(0, 1, I.errhandler))
 					return false;
 				const s32 I_macro_result = lua.gettop();
+
+				// Process the sections produced within the macro, if any.
+				if (!processScopeSections(macro_scope))
+					return false;
+
+				// Append the result of the scope.
+				scope->writeBuffer(macro_scope->buffer->asStr());
 
 				// Figure out what, if anything, the macro returned.
 				if (!lua.isnil())
 				{
 					TRACE("macro returned a value\n");
-					lua.pushvalue(I_MacroExpansion_isTypeOf);
+					lua.pushvalue(I.MacroExpansion_isTypeOf);
 					lua.pushvalue(I_macro_result);
 					if (!lua.pcall(1, 1))
 						return false;
@@ -332,7 +480,7 @@ b8 Metaprogram::run()
 					b8 is_expansion = lua.toboolean();
 					lua.pop();
 
-					if (is_expansion)
+					if (!is_expansion)
 					{
 						// Not a macro expansion, need to make sure its a string instead.
 						lua.pop();
@@ -354,7 +502,7 @@ b8 Metaprogram::run()
 						if (!lua.pcall(1, 1))
 							return false;
 					}
-					output->writeCache(lua.tostring());
+					scope->writeBuffer(lua.tostring());
 				}
 
 				lua.pop();
@@ -362,21 +510,35 @@ b8 Metaprogram::run()
 			break;
 		}
 	}
-
-	output->cacheLineOffsets();
-
-	for (auto& expansion : expansions)
-	{
-		printExpansion(input, output, expansion);
-	}
-
 	return true;
 }
 
+/* ------------------------------------------------------------------------------------------------ 
+ */
+s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
+{
+	for (auto& mapping : input_line_map)
+	{
+		if (line <= mapping.metaprogram)
+			return mapping.input;
+	}
+	return -1;
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
 template<typename... T>
 b8 Metaprogram::errorAt(s32 offset, T... args)
 {
 	input->cacheLineOffsets();
+	Scope* scope = getCurrentScope();
+	while (scope->prev != nullptr)
+	{
+		Source::Loc loc = input->getLoc(scope->macro_invocation->start_offset);
+		INFO(input->name, ":", loc.line, ":", loc.column, ": in scope invoked here:\n");
+		scope = scope->prev;
+	}
+
 	Source::Loc loc = input->getLoc(offset);
 	ERROR(input->name, ":", loc.line, ":", loc.column, ": ", args..., "\n");
 	return false;
@@ -452,6 +614,14 @@ LPP_LUAJIT_FFI_FUNC
 void metaprogramTrackExpansion(Metaprogram* mp, u64 from, u64 to)
 {
 	mp->expansions.pushTail({from, to});
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
+LPP_LUAJIT_FFI_FUNC
+s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line)
+{
+	return mp->mapMetaprogramLineToInputLine(line);
 }
 
 /* ------------------------------------------------------------------------------------------------ 

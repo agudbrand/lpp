@@ -1,10 +1,12 @@
 #include "parser.h"
+#include "iro/linemap.h"
+#include "iro/fs/file.h"
 
 #include "ctype.h"
 
 static Logger logger = Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------ Parser::init
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Parser::init(
 		Source* src,
@@ -16,6 +18,7 @@ b8 Parser::init(
 	TRACE("initializing on stream '", src->name, "'\n");
 
 	tokens = Array<Token>::create();
+	locmap = Array<LocMapping>::create();
 	in = instream;
 	out = outstream;
 	source = src;
@@ -38,7 +41,7 @@ b8 Parser::init(
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::init
+/* ------------------------------------------------------------------------------------------------
  */
 void Parser::deinit()
 {
@@ -46,7 +49,15 @@ void Parser::deinit()
 	*this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::run
+/* ------------------------------------------------------------------------------------------------
+ */
+template<typename... T>
+void Parser::writeOut(T... args)
+{
+	bytes_written += io::formatv(out, args...);
+}
+
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Parser::run()
 {
@@ -71,6 +82,17 @@ b8 Parser::run()
 
 			case Document:
 				TRACE("placing document text: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				{
+					str raw = getRaw();
+					u64 from = curt->loc;
+					locmap.push({.from = bytes_written, .to = curt->loc});
+					for (s32 i = 0; i < raw.len; ++i)
+					{
+						if (i && raw.bytes[i-1] == '\n' && i != raw.len-1)
+							locmap.push({.from = bytes_written+i, .to = curt->loc+i});
+					}
+				}
+
 				writeOut("__metaenv.doc("_str, curt->loc, ",\""_str);
 				// sanitize the document text's control characters into lua's 
 				// represenatations of them
@@ -92,30 +114,44 @@ b8 Parser::run()
 
 			case LuaBlock:
 				TRACE("placing lua block: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				{
+					str raw = getRaw();
+					locmap.push({.from = bytes_written, .to = curt->loc});
+					for (s32 i = 0; i < raw.len; ++i)
+					{
+						if (i && raw.bytes[i-1] == '\n' && i != raw.len-1)
+							locmap.push({.from = bytes_written+i, .to = curt->loc+i});
+					}
+				}
 				writeOut(getRaw(), "\n");
 				nextToken();
 				break;
 
 			case LuaLine:
 				TRACE("placing lua line: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				locmap.push({.from = bytes_written, .to = curt->loc-1});
 				writeOut(getRaw(), "\n");
 				nextToken();
 				break;
 
 			case LuaInline:
 				TRACE("placing lua inline: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+				locmap.push({.from = bytes_written, .to = curt->loc});
 				writeOut("__metaenv.val("_str, curt->loc, ",", getRaw(), ")\n"_str);
 				nextToken();
 				break;
 
 			case MacroSymbol:
 				TRACE("encountered macro symbol\n");
+				locmap.push({.from = bytes_written, .to = curt->loc});
 				writeOut(
 					"__metaenv.macro("_str, curt->loc, ",\"", 
 					source->getStr(curt->macro_indent_loc, curt->macro_indent_len), 
 					"\",");
 
 				nextToken(); // identifier
+
+				locmap.push({.from = bytes_written, .to = curt->loc});
 				writeOut(getRaw());
 
 				nextToken();
@@ -123,6 +159,7 @@ b8 Parser::run()
 				{
 					for (;;)
 					{
+						locmap.push({.from = bytes_written, .to = curt->loc});
 						writeOut(',', 
 							"__metaenv.lpp.MacroPart.new(",
 							'"', source->name, '"', ',',
@@ -137,6 +174,7 @@ b8 Parser::run()
 				}
 				else if (at(MacroArgumentString))
 				{
+					locmap.push({.from = bytes_written, .to = curt->loc});
 					writeOut(',', '"', getRaw(), '"');
 					nextToken();
 				}
@@ -149,7 +187,7 @@ b8 Parser::run()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::nextToken
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Parser::nextToken()
 {
@@ -157,14 +195,14 @@ b8 Parser::nextToken()
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::at
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 Parser::at(Token::Kind kind)
 {
 	return curt->kind == kind;
 }
 
-/* ------------------------------------------------------------------------------------------------ Parser::getRaw
+/* ------------------------------------------------------------------------------------------------ 
  */
 str Parser::getRaw()
 {

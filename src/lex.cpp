@@ -303,6 +303,8 @@ b8 Lexer::run()
 			//             $ lib.func = function() print("hi!") end
 			//
 			//             @lib.func()
+			// TODO(sushi) this could maybe be made more advanced by allowing arbitrary
+			//             whitespace between the dots.
 			while (atIdentifierChar() or at('.'))
 				advance();
 			
