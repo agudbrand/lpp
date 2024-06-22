@@ -25,7 +25,7 @@ struct Expansion;
 
 typedef SLinkedPool<io::Memory> BufferPool;
 
-/* ================================================================================================ Section
+/* ============================================================================
  */
 typedef DLinkedPool<Section> SectionPool;
 typedef SectionPool::List SectionList;
@@ -52,12 +52,16 @@ struct Section
   str macro_indent = nil;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
   b8 initDocument(u64 start_offset, str raw, SectionNode* node);
-  b8 initMacro(u64 start_offset, str macro_indent, u64 macro_idx, SectionNode* node);
+  b8 initMacro(
+      u64 start_offset, 
+      str macro_indent, 
+      u64 macro_idx, 
+      SectionNode* node);
   void deinit();
 
   b8 insertString(u64 start, str s);
@@ -83,7 +87,7 @@ static s64 format(io::IO* io, Section::Kind& kind)
 
 }
 
-/* ================================================================================================ Cursor
+/* ============================================================================
  */
 typedef Pool<Cursor> CursorPool;
 
@@ -99,7 +103,7 @@ struct Cursor
   u64 offset; // into current section
 };
 
-/* ================================================================================================ Expansion
+/* ============================================================================
  */
 typedef DLinkedPool<Expansion> ExpansionList;
 
@@ -109,10 +113,10 @@ struct Expansion
   u64 to;
 };
 
-/* ================================================================================================
+/* ============================================================================
  *  A list of sections and the buffer they are joined into.
- *  We also store information about how the scope started. There is always the global level scope,
- *  then each macro invocation starts its own scope. 
+ *  We also store information about how the scope started. There is always the 
+ *  global level scope then each macro invocation starts its own scope. 
  */
 struct Scope
 {
@@ -133,7 +137,7 @@ struct Scope
 };
 typedef SLinkedPool<Scope> ScopePool;
 
-/* ================================================================================================
+/* ============================================================================
  */
 struct Metaprogram
 {
@@ -169,8 +173,8 @@ struct Metaprogram
   Array<InputLineMapping> input_line_map;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
   b8   init(Lpp* lpp, io::IO* instream, Source* input, Source* output);

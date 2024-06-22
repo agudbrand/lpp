@@ -4,9 +4,10 @@
 #include "iro/linemap.h"
 #include "iro/fs/file.h"
 
-static Logger logger = Logger::create("lpp.metaprog"_str, Logger::Verbosity::Trace);
+static Logger logger = 
+  Logger::create("lpp.metaprog"_str, Logger::Verbosity::Trace);
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
 {
@@ -19,19 +20,23 @@ b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-b8 Section::initMacro(u64 start_offset_, str macro_indent_, u64 macro_idx_, SectionNode* node_)
+b8 Section::initMacro(
+    u64 start_offset, 
+    str macro_indent, 
+    u64 macro_idx, 
+    SectionNode* node)
 {
-  start_offset = start_offset_;
-  node = node_;
-  macro_idx = macro_idx_;
-  macro_indent = macro_indent_;
+  this->start_offset = start_offset;
+  this->node = node;
+  this->macro_idx = macro_idx;
+  this->macro_indent = macro_indent;
   kind = Kind::Macro;
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 void Section::deinit()
 {
@@ -48,7 +53,7 @@ void Section::deinit()
   node = nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Section::insertString(u64 offset, str s)
 {
@@ -57,13 +62,16 @@ b8 Section::insertString(u64 offset, str s)
   mem.reserve(s.len + 1);
   mem.commit(s.len + 1);
 
-  mem::move(mem.buffer + offset + s.len, mem.buffer + offset, mem.len - offset);
+  mem::move(
+      mem.buffer + offset + s.len, 
+      mem.buffer + offset, 
+      mem.len - offset);
   mem::copy(mem.buffer + offset, s.bytes, s.len);
 
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Section::consumeFromBeginning(u64 len)
 {
@@ -76,14 +84,14 @@ b8 Section::consumeFromBeginning(u64 len)
     return true;
   }
 
-  // idk man find a way to not move shit around later maybe with just a str ? idk we edit stuff
-  // too much and IDRC at the moment!!!
+  // idk man find a way to not move shit around later maybe with just a str ? 
+  // idk we edit stuff too much and IDRC at the moment!!!
   mem::move(mem.buffer, mem.buffer + len, mem.len - len);
   mem.len -= len;
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
 {
@@ -104,7 +112,7 @@ b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Metaprogram::deinit()
 {
@@ -119,7 +127,7 @@ void Metaprogram::deinit()
   *this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Scope::init(Scope* prev, io::Memory* buffer, Section* macro_invocation)
 {
@@ -130,7 +138,7 @@ b8 Scope::init(Scope* prev, io::Memory* buffer, Section* macro_invocation)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Scope::deinit()
 {
@@ -138,7 +146,7 @@ void Scope::deinit()
   *this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Scope* Metaprogram::pushScope()
 {
@@ -163,21 +171,21 @@ Scope* Metaprogram::pushScope()
   return scope;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Metaprogram::popScope()
 {
   scope_stack.pop();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Scope* Metaprogram::getCurrentScope()
 {
   return &scope_stack.head();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Metaprogram::addDocumentSection(u64 start, str raw)
 {
@@ -186,7 +194,7 @@ void Metaprogram::addDocumentSection(u64 start, str raw)
   node->data->initDocument(start, raw, node);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Metaprogram::addMacroSection(s64 start, str indent, u64 macro_idx)
 {
@@ -206,7 +214,7 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
      nu.line, ":", nu.column, "(", expansion.to, ")\n");
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Metaprogram::run()
 {
@@ -233,7 +241,7 @@ b8 Metaprogram::run()
     return false;
   defer { parsed_program.close(); };
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 1
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 1
   
   DEBUG("phase 1\n");
 
@@ -254,7 +262,11 @@ b8 Metaprogram::run()
   DEBUG(parsed_program.asStr(), "\n");
 
   {
-    auto f = scoped(fs::File::from("temp/parsed"_str, fs::OpenFlag::Create | fs::OpenFlag::Write | fs::OpenFlag::Truncate));
+    auto f = 
+      scoped(fs::File::from("temp/parsed"_str, 
+            fs::OpenFlag::Create 
+          | fs::OpenFlag::Write 
+          | fs::OpenFlag::Truncate));
     f.write(parsed_program.asStr());
   }
 
@@ -277,11 +289,12 @@ b8 Metaprogram::run()
       });
   }
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 2
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 2
   
   DEBUG("phase 2\n");
 
-  // Execute the lua metacode to form the sections we process in the following phase.
+  // Execute the lua metacode to form the sections we process in the following 
+  // phase.
 
   TRACE("creating global scope\n");
   pushScope();
@@ -368,12 +381,12 @@ b8 Metaprogram::run()
     return false;
   }
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 3
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 3
   
   DEBUG("phase 3\n");
 
-  // Process each section generated by Phase 2, joining each Document section into a 
-  // single buffer and performing macro expansions.
+  // Process each section generated by Phase 2, joining each Document section 
+  // into a single buffer and performing macro expansions.
   
   // Retrieve MacroExpansion.isTypeOf
   TRACE("getting MacroExpansion.isTypeOf\n");
@@ -414,7 +427,7 @@ b8 Metaprogram::run()
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Metaprogram::processScopeSections(Scope* scope)
 {
@@ -488,7 +501,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 str Metaprogram::consumeCurrentScope()
 {
@@ -509,7 +522,7 @@ str Metaprogram::consumeCurrentScope()
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
 {
@@ -521,7 +534,7 @@ s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
   return -1;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 template<typename... T>
 b8 Metaprogram::errorAt(s32 offset, T... args)
@@ -531,7 +544,8 @@ b8 Metaprogram::errorAt(s32 offset, T... args)
   while (scope->prev != nullptr)
   {
     Source::Loc loc = input->getLoc(scope->macro_invocation->start_offset);
-    INFO(input->name, ":", loc.line, ":", loc.column, ": in scope invoked here:\n");
+    INFO(input->name, ":", loc.line, ":", loc.column, 
+         ": in scope invoked here:\n");
     scope = scope->prev;
   }
 
@@ -547,15 +561,19 @@ extern "C"
 b8 sectionIsDocument(SectionNode* section);
 b8 sectionIsMacro(SectionNode* section);
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-void metaprogramAddMacroSection(Metaprogram* mp, str indent, u64 start, u64 macro_idx)
+void metaprogramAddMacroSection(
+    Metaprogram* mp, 
+    str indent, 
+    u64 start, 
+    u64 macro_idx)
 {
   mp->addMacroSection(start, indent, macro_idx);
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 void metaprogramAddDocumentSection(Metaprogram* mp, u64 start, str raw)
@@ -563,7 +581,7 @@ void metaprogramAddDocumentSection(Metaprogram* mp, u64 start, str raw)
   mp->addDocumentSection(start, raw);
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 Cursor* metaprogramNewCursorAfterSection(Metaprogram* mp)
@@ -575,11 +593,12 @@ Cursor* metaprogramNewCursorAfterSection(Metaprogram* mp)
   cursor->creator = mp->current_section->next;
   cursor->section = cursor->creator;
   cursor->range = cursor->section->data->mem.asStr();
-  cursor->current_codepoint = utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
+  cursor->current_codepoint = 
+    utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
   return cursor;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 void metaprogramDeleteCursor(Metaprogram* mp, Cursor* cursor)
@@ -587,7 +606,7 @@ void metaprogramDeleteCursor(Metaprogram* mp, Cursor* cursor)
   mp->cursors.remove(cursor);
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 str metaprogramGetMacroIndent(Metaprogram* mp)
@@ -596,7 +615,7 @@ str metaprogramGetMacroIndent(Metaprogram* mp)
   return mp->current_section->data->macro_indent;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 str metaprogramGetOutputSoFar(Metaprogram* mp)
@@ -604,7 +623,7 @@ str metaprogramGetOutputSoFar(Metaprogram* mp)
   return mp->output->cache.asStr();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 void metaprogramTrackExpansion(Metaprogram* mp, u64 from, u64 to)
@@ -612,7 +631,7 @@ void metaprogramTrackExpansion(Metaprogram* mp, u64 from, u64 to)
   mp->expansions.pushTail({from, to});
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line)
@@ -620,12 +639,12 @@ s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line)
   return mp->mapMetaprogramLineToInputLine(line);
 }
 
-/* ------------------------------------------------------------------------------------------------
- *  Processes the sections of the current scope and returns the result as a str.
- *  This does not end the scope.
+/* ----------------------------------------------------------------------------
+ *  Processes the sections of the current scope and returns the result as a 
+ *  str. This does not end the scope.
  *
- *  TODO(sushi) a version of this could be made that forks the scope and returns it to be 
- *              evaluated later.
+ *  TODO(sushi) a version of this could be made that forks the scope and 
+ *              returns it to be evaluated later.
  */
 LPP_LUAJIT_FFI_FUNC
 str metaprogramConsumeCurrentScopeString(Metaprogram* mp)
@@ -633,7 +652,7 @@ str metaprogramConsumeCurrentScopeString(Metaprogram* mp)
   return mp->consumeCurrentScope();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 cursorNextChar(Cursor* cursor)
@@ -650,11 +669,12 @@ b8 cursorNextChar(Cursor* cursor)
   if (cursor->range.len == 0)
     return false;
 
-  cursor->current_codepoint = utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
+  cursor->current_codepoint = 
+    utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 u32  cursorCurrentCodepoint(Cursor* cursor)

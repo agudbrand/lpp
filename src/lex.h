@@ -15,7 +15,7 @@
 
 struct Lpp;
 
-/* ================================================================================================ Token
+/* ============================================================================
  */
 struct Token
 {
@@ -56,22 +56,23 @@ struct Token
 };
 
 
-/* ================================================================================================ Lexer
+/* ============================================================================
  *
  *  TODO(sushi) try reworking the lexer to give a token
  *              stream again instead of caching them into an array
  *              to save on memory. Making it a stream complicates the 
  *              internal logic too much at the moment so I'm just 
  *              going to avoid it for now.
- *              It's not a huge issue, though, because Tokens are quite small, and with how lpp 
- *              works we shouldn't be making too many tokens to begin with.
+ *              It's not a huge issue, though, because Tokens are quite small, 
+ *              and with how lpp works we shouldn't be making too many tokens 
+ *              to begin with.
  */
 struct Lexer
 {
   using enum Token::Kind;
   typedef Array<Token> TokenArray;
 
-    utf8::Codepoint current_codepoint;
+  utf8::Codepoint current_codepoint;
   u64 current_offset;
 
   Source* source;
@@ -129,7 +130,8 @@ static s64 format(io::IO* io, Token::Kind& kind)
 {
   switch (kind)
   {
-#define c(x) case Token::Kind::x: return formatv(io, color::magenta(STRINGIZE(x)));
+#define c(x) \
+    case Token::Kind::x: return formatv(io, color::magenta(STRINGIZE(x)));
   c(Invalid);
   c(Eof);
   c(LuaLine);

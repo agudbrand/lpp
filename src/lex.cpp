@@ -5,12 +5,12 @@
 #include "ctype.h"
 #include "assert.h"
 
-static Logger logger = Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
+static Logger logger = 
+  Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
 
 
-// ==============================================================================================================
-/* ------------------------------------------------------------------------------------------------ Lexer helpers
+/* ----------------------------------------------------------------------------
  */
 u32 Lexer::current() { return current_codepoint.codepoint; }
 
@@ -18,9 +18,12 @@ b8 Lexer::at(u8 c) { return current() == c; }
 b8 Lexer::eof()    { return at_end || at(0) || isnil(current_codepoint); }
 
 b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
-b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
+b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || 
+                                      isdigit(current()); }
 
-// returns false if we've reached the end of the buffer
+/* ----------------------------------------------------------------------------
+ *  Returns false if we've reached the end of the buffer.
+ */
 b8 Lexer::readStreamIfNeeded()
 {
   if (current_offset == source->cache.len)
@@ -48,7 +51,8 @@ b8 Lexer::readStreamIfNeeded()
   return true;
 }
 
-
+/* ----------------------------------------------------------------------------
+ */
 b8 Lexer::decodeCurrent()
 {
   current_codepoint = 
@@ -59,6 +63,8 @@ b8 Lexer::decodeCurrent()
   return notnil(current_codepoint);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void Lexer::advance(s32 n)
 {
   for (s32 i = 0; i < n; i++)
@@ -87,13 +93,15 @@ void Lexer::advance(s32 n)
   }
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void Lexer::skipWhitespace()
 {
   while (isspace(current()))
     advance();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 template<typename... T>
 b8 Lexer::errorAt(s32 line, s32 column, T... args)
@@ -102,7 +110,7 @@ b8 Lexer::errorAt(s32 line, s32 column, T... args)
   return false;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 template<typename... T>
 b8 Lexer::errorAtToken(Token& t, T... args)
@@ -112,7 +120,7 @@ b8 Lexer::errorAtToken(Token& t, T... args)
   return errorAt(loc.line, loc.column, args...);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 template<typename... T>
 b8 Lexer::errorHere(T... args)
@@ -122,7 +130,7 @@ b8 Lexer::errorHere(T... args)
   return errorAt(loc.line, loc.column, args...);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lexer::init(io::IO* input_stream, Source* src)
 {
@@ -145,7 +153,7 @@ b8 Lexer::init(io::IO* input_stream, Source* src)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Lexer::deinit()
 {
@@ -153,7 +161,7 @@ void Lexer::deinit()
   *this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lexer::run()
 {
@@ -217,8 +225,8 @@ b8 Lexer::run()
           for (;;)
           {
             if ((advance(), at('$')) and
-              (advance(), at('$')) and
-              (advance(), at('$')))
+                (advance(), at('$')) and
+                (advance(), at('$')))
             {
               advance();
               finishCurt(LuaBlock, -3);
@@ -226,7 +234,8 @@ b8 Lexer::run()
             }
 
             if (eof())
-              return errorAtToken(curt, "unexpected eof while consuming lua block");
+              return errorAtToken(curt, 
+                  "unexpected eof while consuming lua block");
           }
         }
         else
@@ -273,13 +282,15 @@ b8 Lexer::run()
         if (not eof())
           advance();
 
-        // remove whitespace before lua lines to preserve formatting 
-        // NOTE(sushi) this is a large reason why the lexer is not token-stream based anymore!
+        // Remove whitespace before lua lines to preserve formatting 
+        // NOTE(sushi) this is a large reason why the lexer is not 
+        //             token-stream based anymore!
         if (tokens.len() != 0)
         {
           Token* last = tokens.arr + tokens.len() - 2;
           str raw = last->getRaw(source);
-          while (isspace(raw.bytes[last->len-1]) && raw.bytes[last->len-1] != '\n')
+          while (isspace(raw.bytes[last->len-1]) && 
+                 raw.bytes[last->len-1] != '\n')
             last->len -= 1;
         }
       }
@@ -303,8 +314,8 @@ b8 Lexer::run()
       //             $ lib.func = function() print("hi!") end
       //
       //             @lib.func()
-      // TODO(sushi) this could maybe be made more advanced by allowing arbitrary
-      //             whitespace between the dots.
+      // TODO(sushi) this could maybe be made more advanced by allowing 
+      //             arbitrary whitespace between the dots.
       while (atIdentifierChar() or at('.'))
         advance();
       
@@ -360,7 +371,8 @@ b8 Lexer::run()
           advance();
           if (eof())
             return errorAtToken(curt, 
-                "unexpected end of file while consuming macro string argument");
+                "unexpected end of file while consuming macro string "
+                "argument");
 
           if (at('"'))
             break;
@@ -379,7 +391,7 @@ b8 Lexer::run()
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Lexer::initCurt()
 {
@@ -387,7 +399,7 @@ void Lexer::initCurt()
   curt.loc = current_offset;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 {

@@ -16,7 +16,7 @@ static Logger logger = Logger::create("lpp"_str, Logger::Verbosity::Debug);
 
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lpp::init()
 {
@@ -52,7 +52,7 @@ b8 Lpp::init()
     return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Lpp::deinit()
 {
@@ -69,7 +69,7 @@ void Lpp::deinit()
   *this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
 {
@@ -98,7 +98,7 @@ b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
   return true;
 }
 
-/* ================================================================================================ lua C API
+/* ============================================================================
  *  C api exposed to the internal lpp module 
  */
 extern "C"
@@ -110,7 +110,7 @@ struct MetaprogramBuffer
   u64         memsize;
 };
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  *  Wrapper around an lpp context's create_metaprogram() and run_metaprogram(). This creates a 
  *  metaprogram, executes it, and then returns a handle to the memory buffer its stored in along 
  *  with the size needed to store it in memory. This must be passed back into 
@@ -154,9 +154,10 @@ MetaprogramBuffer processFile(Lpp* lpp, str path)
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------
- *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram cannot be retrieved 
- *  for some reason then 'outbuf' should be null. Frees the metaprogram memory in anycase.
+/* ----------------------------------------------------------------------------
+ *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram 
+ *  cannot be retrieved for some reason then 'outbuf' should be null. Frees the 
+ *  metaprogram memory in anycase.
  */
 LPP_LUAJIT_FFI_FUNC
 void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
