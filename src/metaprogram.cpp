@@ -682,7 +682,7 @@ u32  cursorCurrentCodepoint(Cursor* cursor)
   return cursor->current_codepoint.codepoint;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 cursorInsertString(Cursor* cursor, str text)
@@ -705,7 +705,7 @@ b8 cursorInsertString(Cursor* cursor, str text)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 SectionNode* cursorGetSection(Cursor* cursor)
@@ -713,7 +713,7 @@ SectionNode* cursorGetSection(Cursor* cursor)
   return cursor->section;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 str cursorGetRestOfSection(Cursor* cursor)
@@ -722,7 +722,7 @@ str cursorGetRestOfSection(Cursor* cursor)
   return cursor->range;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 SectionNode* metaprogramGetNextSection(Metaprogram* mp)
@@ -730,7 +730,7 @@ SectionNode* metaprogramGetNextSection(Metaprogram* mp)
   return mp->current_section->next;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 str sectionGetString(SectionNode* section)
@@ -738,7 +738,7 @@ str sectionGetString(SectionNode* section)
   return section->data->mem.asStr();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 SectionNode* sectionNext(SectionNode* section)
@@ -746,7 +746,7 @@ SectionNode* sectionNext(SectionNode* section)
   return section->next;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 SectionNode* sectionPrev(SectionNode* section)
@@ -754,7 +754,7 @@ SectionNode* sectionPrev(SectionNode* section)
   return section->prev;
 }
 
-/* ------------------------------------------------------------------------------------------------ sectionIsMacro
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 sectionIsMacro(SectionNode* section)
@@ -762,7 +762,7 @@ b8 sectionIsMacro(SectionNode* section)
   return section->data->kind == Section::Kind::Macro;
 }
 
-/* ------------------------------------------------------------------------------------------------ sectionIsDocument
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 sectionIsDocument(SectionNode* section)
@@ -770,7 +770,7 @@ b8 sectionIsDocument(SectionNode* section)
   return section->data->kind == Section::Kind::Document;
 }
 
-/* ------------------------------------------------------------------------------------------------ sectionInsertString
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 sectionInsertString(SectionNode* section, u64 offset, str s)
@@ -779,7 +779,7 @@ b8 sectionInsertString(SectionNode* section, u64 offset, str s)
   return section->data->insertString(offset, s);
 }
 
-/* ------------------------------------------------------------------------------------------------ sectionConsumeFromBeginning
+/* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
 b8 sectionConsumeFromBeginning(SectionNode* section, u64 len)
