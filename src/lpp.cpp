@@ -16,86 +16,86 @@ static Logger logger = Logger::create("lpp"_str, Logger::Verbosity::Debug);
 
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
-/* ------------------------------------------------------------------------------------------------ Lpp::init
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Lpp::init()
 {
-	INFO("init\n");
+  INFO("init\n");
 
-	DEBUG("creating lua state\n");
-	lua.init();
+  DEBUG("creating lua state\n");
+  lua.init();
 
-	DEBUG("creating metaenv stack\n");
-	lua.newtable();
-	lua.setglobal(lpp_metaenv_stack);
+  DEBUG("creating metaenv stack\n");
+  lua.newtable();
+  lua.setglobal(lpp_metaenv_stack);
 
-	DEBUG("creating pools\n");
-	sources.init();
-	metaprograms.init();
+  DEBUG("creating pools\n");
+  sources.init();
+  metaprograms.init();
 
-	DEBUG("loading luajit ffi\n");
-	if (!lua.dofile("src/cdefs.lua"))
-	{
-		ERROR("failed to load luajit ffi\n");
-		return false;
-	}
+  DEBUG("loading luajit ffi\n");
+  if (!lua.dofile("src/cdefs.lua"))
+  {
+    ERROR("failed to load luajit ffi\n");
+    return false;
+  }
 
-	if (!lua.require("lpp"_str))
-		return false;
+  if (!lua.require("lpp"_str))
+    return false;
 
-	// give lpp module a handle to us
-	lua.pushstring("handle"_str);
-	lua.pushlightuserdata(this);
-	lua.settable(lua.gettop()-2);
-	lua.pop();
+  // give lpp module a handle to us
+  lua.pushstring("handle"_str);
+  lua.pushlightuserdata(this);
+  lua.settable(lua.gettop()-2);
+  lua.pop();
 
     return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lpp::init
+/* ------------------------------------------------------------------------------------------------
  */
 void Lpp::deinit()
 {
-	lua.deinit();
+  lua.deinit();
 
-	for (auto& source : sources)
-		source.deinit();
-	sources.deinit();
+  for (auto& source : sources)
+    source.deinit();
+  sources.deinit();
 
-	for (auto& metaprogram : metaprograms)
-		metaprogram.deinit();
-	metaprograms.deinit();
+  for (auto& metaprogram : metaprograms)
+    metaprogram.deinit();
+  metaprograms.deinit();
 
-	*this = {};
+  *this = {};
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
 {
-	DEBUG("creating metaprogram from input stream '", name, "'\n");
+  DEBUG("creating metaprogram from input stream '", name, "'\n");
 
-	Source* source = sources.pushTail()->data;
-	if (!source->init(name))
-		return false;
-	defer { source->deinit(); };
+  Source* source = sources.pushTail()->data;
+  if (!source->init(name))
+    return false;
+  defer { source->deinit(); };
 
-	Source* dest = sources.pushTail()->data;
-	if (!dest->init("dest"_str)) // TODO(sushi) dont use 'dest' here.
-		return false;
-	defer { dest->deinit(); };
+  Source* dest = sources.pushTail()->data;
+  if (!dest->init("dest"_str)) // TODO(sushi) dont use 'dest' here.
+    return false;
+  defer { dest->deinit(); };
 
-	Metaprogram* metaprog = metaprograms.pushTail()->data;
-	if (!metaprog->init(this, instream, source, dest))
-		return false;
-	defer { metaprog->deinit(); };
+  Metaprogram* metaprog = metaprograms.pushTail()->data;
+  if (!metaprog->init(this, instream, source, dest))
+    return false;
+  defer { metaprog->deinit(); };
 
-	if (!metaprog->run())
-		return false;
+  if (!metaprog->run())
+    return false;
 
-	outstream->write(metaprog->output->cache.asStr());
-	
-	return true;
+  outstream->write(metaprog->output->cache.asStr());
+  
+  return true;
 }
 
 /* ================================================================================================ lua C API
@@ -106,11 +106,11 @@ extern "C"
 
 struct MetaprogramBuffer
 {
-	io::Memory* memhandle;
-	u64         memsize;
+  io::Memory* memhandle;
+  u64         memsize;
 };
 
-/* ------------------------------------------------------------------------------------------------ processFile
+/* ------------------------------------------------------------------------------------------------
  *  Wrapper around an lpp context's create_metaprogram() and run_metaprogram(). This creates a 
  *  metaprogram, executes it, and then returns a handle to the memory buffer its stored in along 
  *  with the size needed to store it in memory. This must be passed back into 
@@ -136,37 +136,37 @@ struct MetaprogramBuffer
 LPP_LUAJIT_FFI_FUNC
 MetaprogramBuffer processFile(Lpp* lpp, str path)
 {
-	auto f = fs::File::from(path, fs::OpenFlag::Read);
-	if (isnil(f))
-		return {};
-	defer { f.close(); };
+  auto f = fs::File::from(path, fs::OpenFlag::Read);
+  if (isnil(f))
+    return {};
+  defer { f.close(); };
 
-	auto result = mem::stl_allocator.construct<io::Memory>();
-	result->open();
-	defer { result->close(); };
+  auto result = mem::stl_allocator.construct<io::Memory>();
+  result->open();
+  defer { result->close(); };
 
-	if (!lpp->processStream(path, &f, result))
-		return {};
+  if (!lpp->processStream(path, &f, result))
+    return {};
 
-	MetaprogramBuffer out;
-	out.memhandle = result;
-	out.memsize = result->len;
-	return out;
+  MetaprogramBuffer out;
+  out.memhandle = result;
+  out.memsize = result->len;
+  return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ getMetaprogramResult
+/* ------------------------------------------------------------------------------------------------
  *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram cannot be retrieved 
  *  for some reason then 'outbuf' should be null. Frees the metaprogram memory in anycase.
  */
 LPP_LUAJIT_FFI_FUNC
 void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
 {
-	if (outbuf)
-	{
-		mpbuf.memhandle->read({(u8*)outbuf, mpbuf.memsize});
-	}
+  if (outbuf)
+  {
+    mpbuf.memhandle->read({(u8*)outbuf, mpbuf.memsize});
+  }
 
-	mpbuf.memhandle->close();
+  mpbuf.memhandle->close();
 }
 
 }

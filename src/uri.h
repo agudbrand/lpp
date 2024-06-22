@@ -21,17 +21,17 @@ struct URI
     io::Memory authority;
     io::Memory body;
 
-	b8   init();
-	void deinit();
+  b8   init();
+  void deinit();
 
-	void reset();
+  void reset();
 
-	// parses the given string into a URI 
-	//
-	static b8 parse(URI* uri, str s);
+  // parses the given string into a URI 
+  //
+  static b8 parse(URI* uri, str s);
 
-	b8 encode();
-	b8 decode();
+  b8 encode();
+  b8 decode();
 };
 
 #endif // _lpp_uri_h

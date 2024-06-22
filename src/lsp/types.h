@@ -15,26 +15,26 @@ namespace lsp
  */
 struct Message
 {
-	// always "2.0" in lsp
-	str jsonrpc;
+  // always "2.0" in lsp
+  str jsonrpc;
 };
 
 /* ================================================================================================ lsp::RequestMessage
  */
 struct RequestMessage : public Message
 {
-	// Request id.
-	union 
-	{
-		s64 integer;
-		str string;
-	} id;
+  // Request id.
+  union 
+  {
+    s64 integer;
+    str string;
+  } id;
 
-	// Method to be invoked
-	str method;
+  // Method to be invoked
+  str method;
 
-	// Method params
-	
+  // Method params
+  
 };
 
 } // namespace lsp

@@ -18,12 +18,12 @@ namespace lsp
  */
 struct Server
 {
-	Lpp lpp;
+  Lpp lpp;
 
-	b8   init();
-	void deinit();
+  b8   init();
+  void deinit();
 
-	b8 loop();
+  b8 loop();
 };
 
 } // namespace lsp

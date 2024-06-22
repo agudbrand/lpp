@@ -1,7 +1,7 @@
 /* ----------------------------------------------
  *
- *	lpp state and interface used throughout the 
- *	project.
+ *  lpp state and interface used throughout the 
+ *  project.
  *
  *  TODO(sushi) add a lpp api function for quitting execution entirely via a longjmp 
  *              or something. When an error occurs in nested metaprograms 
@@ -30,15 +30,15 @@ struct Metaprogram;
 
 struct Lpp
 {
-	LuaState lua;
+  LuaState lua;
 
-	DLinkedPool<Metaprogram> metaprograms;
-	DLinkedPool<Source> sources;
+  DLinkedPool<Metaprogram> metaprograms;
+  DLinkedPool<Source> sources;
 
     b8   init();
-	void deinit();
+  void deinit();
 
-	b8 processStream(str name, io::IO* instream, io::IO* outstream);
+  b8 processStream(str name, io::IO* instream, io::IO* outstream);
 }; 
 
 #endif // _lpp_lpp_h

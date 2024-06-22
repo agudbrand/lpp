@@ -31,107 +31,109 @@ DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 //             in iro.
 struct ArgIter
 {
-	const char** argv = nullptr;
-	u64 argc = 0;
-	u64 idx = 0;
+  const char** argv = nullptr;
+  u64 argc = 0;
+  u64 idx = 0;
 
-	str current = nil;
+  str current = nil;
 
-	ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
-	{  
-		idx = 1;
-		next();
-	}
+  ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
+  {  
+    idx = 1;
+    next();
+  }
 
-	void next()
-	{
-		if (idx == argc)
-		{
-			current = nil;
-			return;
-		}
+  void next()
+  {
+    if (idx == argc)
+    {
+      current = nil;
+      return;
+    }
 
-		current = { (u8*)argv[idx++] };
-		current.len = strlen((char*)current.bytes);
-	}
+    current = { (u8*)argv[idx++] };
+    current.len = strlen((char*)current.bytes);
+  }
 };
 
 b8 processArgv(int argc, const char** argv, str* out_file)
 {
-	for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
-	{
-		str arg = iter.current;
-		if (arg.bytes[0] == '-')
-		{
-			io::formatv(&fs::stdout, 
-				"error: arguments other than the processed file are not supported yet.");
-			return false;
-		}
+  for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
+  {
+    str arg = iter.current;
+    if (arg.bytes[0] == '-')
+    {
+      io::formatv(&fs::stdout, 
+        "error: arguments other than the processed file are not supported yet.");
+      return false;
+    }
 
-		*out_file = arg;
-		break;
-	}
-	return true;
+    *out_file = arg;
+    break;
+  }
+  return true;
 }
 
 int main(int argc, const char** argv) 
 {
-	iro::log.init();
-	defer { iro::log.deinit(); };
+  iro::log.init();
+  defer { iro::log.deinit(); };
 
-	Logger logger;
-	logger.init("lpp"_str, Logger::Verbosity::Trace);
+  Logger logger;
+  logger.init("lpp"_str, Logger::Verbosity::Trace);
 
-	{
-		using enum Log::Dest::Flag;
-		iro::log.newDestination("stdout"_str, &fs::stdout, 
-				AllowColor |
-				ShowCategoryName |
-				ShowVerbosity |
-				TrackLongestName |
-				PadVerbosity |
-				PrefixNewlines);
-	}
+  {
+    using enum Log::Dest::Flag;
+    iro::log.newDestination("stdout"_str, &fs::stdout, 
+          AllowColor 
+        | ShowCategoryName
+        | ShowVerbosity
+        | TrackLongestName
+        | PadVerbosity
+        | PrefixNewlines);
+  }
 
-	// TODO(sushi) actual cli args in lpp, especially when we get to supporting an lsp 
-	str file = nil;
-	if (!processArgv(argc, argv, &file))
-		return 1;
+  // return 0;
 
-	if (isnil(file))
-	{
-		FATAL("no input file\n");
-		return 1;
-	}
+  // TODO(sushi) actual cli args in lpp, especially when we get to supporting an lsp 
+  str file = nil;
+  if (!processArgv(argc, argv, &file))
+    return 1;
 
-	Lpp lpp = {}; 
-	if (!lpp.init())
-		return 1;
-	// defer { lpp.deinit(); };
-	
-	auto filehandle = scoped(fs::File::from(file, fs::OpenFlag::Read));
-	if (isnil(filehandle))
-		return 1;
+  if (isnil(file))
+  {
+    FATAL("no input file\n");
+    return 1;
+  }
 
-	io::Memory mp;
-	mp.open();
+  Lpp lpp = {}; 
+  if (!lpp.init())
+    return 1;
+  // defer { lpp.deinit(); };
+  
+  auto filehandle = scoped(fs::File::from(file, fs::OpenFlag::Read));
+  if (isnil(filehandle))
+    return 1;
 
-	io::IO* out = nullptr;
-	
-	auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
-	auto outclose = deferWithCancel { outfile.close(); };
-	if (notnil(outfile))
-	{
-		out = &outfile;
-	}
-	else
-	{
-		outclose.cancel();
-		out = &fs::stdout;
-	}
+  io::Memory mp;
+  mp.open();
 
-	if (!lpp.processStream(file, &filehandle, &outfile))
-		return 1;
+  io::IO* out = nullptr;
+  
+  auto outfile = fs::File::from("temp/out"_str, fs::OpenFlag::Write | fs::OpenFlag::Create | fs::OpenFlag::Truncate);
+  auto outclose = deferWithCancel { outfile.close(); };
+  if (notnil(outfile))
+  {
+    out = &outfile;
+  }
+  else
+  {
+    outclose.cancel();
+    out = &fs::stdout;
+  }
 
-	return 0;
+  if (!lpp.processStream(file, &filehandle, &outfile))
+    return 1;
+
+  return 0;
 }

@@ -7,6 +7,10 @@
 local ffi = require "ffi"
 local C = ffi.C
 
+local log = require"logger"("lpp.lua", Verbosity.Notice)
+
+log:info "initializing lpp lua module\n"
+
 local buffer = require "string.buffer"
 
 local List = require "list"
@@ -14,21 +18,21 @@ local Twine = require "twine"
 
 local strtype = ffi.typeof("str")
 local strToLua = function(s)
-	return ffi.string(s.s, s.len)
+  return ffi.string(s.s, s.len)
 end
 local luaToStr = function(s)
-	return strtype(s, #s)
+  return strtype(s, #s)
 end
 
 local makeStruct = function()
-	local o = {}
-	o.__index = o
-	return o
+  local o = {}
+  o.__index = o
+  return o
 end
 
 local MacroExpansion,
-	  MacroPart,
-	  Section
+    MacroPart,
+    Section
 
 -- * ==============================================================================================
 -- *   lpp
@@ -47,7 +51,16 @@ local lpp = {}
 
 local lua_error = error
 error = function(msg)
-	lua_error(msg, 0)
+  lua_error(msg, 0)
+end
+
+-- patch lua's print with one that prefixes the message with the srcloc of the print
+-- as print is only meant to be used for debug purposes and losing where they are is 
+-- quite easy.
+local lua_print = print
+print = function(first, ...)
+  local info = debug.getinfo(2)
+  lua_print(info.source..":"..info.currentline..": "..tostring(first), ...)
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -59,7 +72,7 @@ end
 ---
 ---@return string
 lpp.getMacroIndentation = function()
-	return strToLua(C.metaprogramGetMacroIndent(lpp.context))
+  return strToLua(C.metaprogramGetMacroIndent(lpp.context))
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -71,15 +84,15 @@ end
 ---@param path string
 ---@return string
 lpp.processFile = function(path)
-	local mpb = assert(C.processFile(lpp.handle, luaToStr(path)),
-					"failed to get memory buffer from processFile")
+  local mpb = assert(C.processFile(lpp.handle, luaToStr(path)),
+          "failed to get memory buffer from processFile")
 
-	local result = buffer.new(mpb.memsize)
-	local buf = result:ref()
+  local result = buffer.new(mpb.memsize)
+  local buf = result:ref()
 
-	C.getMetaprogramResult(mpb, buf)
+  C.getMetaprogramResult(mpb, buf)
 
-	return ffi.string(buf, mpb.memsize)
+  return ffi.string(buf, mpb.memsize)
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -88,10 +101,10 @@ end
 ---
 ---@return Section?
 lpp.getSectionAfterMacro = function()
-	local s = C.metaprogramGetNextSection(lpp.context)
-	if s ~= nil then
-		return Section.new(s)
-	end
+  local s = C.metaprogramGetNextSection(lpp.context)
+  if s ~= nil then
+    return Section.new(s)
+  end
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -100,7 +113,18 @@ end
 ---
 ---@return string
 lpp.getOutputSoFar = function()
-	return strToLua(C.metaprogramGetOutputSoFar(lpp.context))
+  return strToLua(C.metaprogramGetOutputSoFar(lpp.context))
+end
+
+-- * ----------------------------------------------------------------------------------------------
+
+--- Consumes the current scope (macro invocation) and returns its result as a string.
+---
+-- TODO(sushi) better document what exactly this is doing once its more clear to me 
+--
+---@return string
+lpp.consumeCurrentScope = function()
+  return strToLua(C.metaprogramConsumeCurrentScopeString(lpp.context))
 end
 
 -- * ==============================================================================================
@@ -125,7 +149,7 @@ lpp.Section = Section
 --
 ---@param handle userdata
 Section.new = function(handle)
-	return setmetatable({handle=handle}, Section)
+  return setmetatable({handle=handle}, Section)
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -135,10 +159,10 @@ end
 ---
 ---@return Section?
 Section.getNextSection = function(self)
-	local s = C.sectionNext(self.handle)
-	if s ~= nil then
-		return Section.new(s)
-	end
+  local s = C.sectionNext(self.handle)
+  if s ~= nil then
+    return Section.new(s)
+  end
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -148,10 +172,10 @@ end
 ---
 ---@return Section?
 Section.getPrevSection = function(self)
-	local s = C.sectionNext(self.handle)
-	if s ~= nil then
-		return Section.new(s)
-	end
+  local s = C.sectionNext(self.handle)
+  if s ~= nil then
+    return Section.new(s)
+  end
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -176,8 +200,8 @@ Section.isDocument = function(self) return 0 ~= C.sectionIsDocument(self.handle)
 ---
 ---@return string?
 Section.getString = function(self)
-	if not self:isDocument() then return nil end
-	return strToLua(C.sectionGetString(self.handle))
+  if not self:isDocument() then return nil end
+  return strToLua(C.sectionGetString(self.handle))
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -188,7 +212,7 @@ end
 ---@param text string
 ---@return boolean
 Section.insertString = function(self, offset, text)
-	return 0 ~= C.sectionInsertString(self.handle, offset, luaToStr(text))
+  return 0 ~= C.sectionInsertString(self.handle, offset, luaToStr(text))
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -198,7 +222,7 @@ end
 ---@param len number
 ---@return boolean
 Section.consumeFromBeginning = function(self, len)
-	return 0 ~= C.sectionConsumeFromBeginning(self.handle , len)
+  return 0 ~= C.sectionConsumeFromBeginning(self.handle , len)
 end
 
 -- * ==============================================================================================
@@ -225,7 +249,7 @@ lpp.MacroExpansion = MacroExpansion
 ---@param x any
 ---@return boolean
 MacroExpansion.isTypeOf = function(x)
-	return getmetatable(x) == MacroExpansion
+  return getmetatable(x) == MacroExpansion
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -237,10 +261,10 @@ end
 ---@param ... string | MacroPart
 ---@return MacroExpansion
 MacroExpansion.new = function(...)
-	return setmetatable(
-	{
-		list = List{...}
-	}, MacroExpansion)
+  return setmetatable(
+  {
+    list = List{...}
+  }, MacroExpansion)
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -250,8 +274,8 @@ end
 ---@param v string | MacroPart
 ---@return self
 MacroExpansion.pushFront = function(self, v)
-	self.list:pushFront(v)
-	return self
+  self.list:pushFront(v)
+  return self
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -261,8 +285,8 @@ end
 ---@param v string | MacroPart
 ---@return self
 MacroExpansion.pushBack = function(self, v)
-	self.list:push(v)
-	return self
+  self.list:push(v)
+  return self
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -273,19 +297,19 @@ end
 --
 ---@param offset number The offset into the buffer this macro was used in.
 MacroExpansion.__call = function(self, offset)
-	local out = buffer.new()
+  local out = buffer.new()
 
-	self.list:each(function(x)
-		if MacroPart.isTypeOf(x)
-		then
-			C.metaprogramTrackExpansion(lpp.context, x.start, offset + #out)
-			out:put(tostring(x))
-		else
-			out:put(x)
-		end
-	end)
+  self.list:each(function(x)
+    if MacroPart.isTypeOf(x)
+    then
+      C.metaprogramTrackExpansion(lpp.context, x.start, offset + #out)
+      out:put(tostring(x))
+    else
+      out:put(x)
+    end
+  end)
 
-	return out:get()
+  return out:get()
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -308,38 +332,38 @@ end
 ---@param rhs MacroExpansion | MacroPart | string
 ---@return MacroExpansion
 MacroExpansion.__concat = function(lhs, rhs)
-	local tryToString = function(from, to)
-		assert(getmetatable(from), "attempt to concatenate a plain table with a MacroExpansion!")
-		assert(getmetatable(from).__tostring,
-			"attempt to concatenate a table with no '__tostring' method with a MacroExpansion!")
+  local tryToString = function(from, to)
+    assert(getmetatable(from), "attempt to concatenate a plain table with a MacroExpansion!")
+    assert(getmetatable(from).__tostring,
+      "attempt to concatenate a table with no '__tostring' method with a MacroExpansion!")
 
-		return to:pushBack(tostring(from))
-	end
+    return to:pushBack(tostring(from))
+  end
 
-	if MacroExpansion.isTypeOf(lhs) 
-	then ---@cast lhs -string
-		if MacroPart.isTypeOf(rhs) or
-		   "string" == type(rhs)
-		then ---@cast rhs -MacroExpansion
-		 	return lhs:pushBack(rhs)
-		elseif MacroExpansion.isTypeOf(rhs)
-		then ---@cast rhs MacroExpansion
-			rhs.list:each(function(x)
-				lhs:pushBack(x)
-			end)
-			return lhs
-		else
-			return tryToString(rhs, lhs)
-		end
-	else ---@cast lhs -MacroExpansion
-		 ---@cast rhs MacroExpansion
-		if "string" == type(lhs)
-		then
-			return rhs:pushFront(lhs)
-		else
-			return tryToString(lhs, rhs)
-		end
-	end
+  if MacroExpansion.isTypeOf(lhs) 
+  then ---@cast lhs -string
+    if MacroPart.isTypeOf(rhs) or
+       "string" == type(rhs)
+    then ---@cast rhs -MacroExpansion
+      return lhs:pushBack(rhs)
+    elseif MacroExpansion.isTypeOf(rhs)
+    then ---@cast rhs MacroExpansion
+      rhs.list:each(function(x)
+        lhs:pushBack(x)
+      end)
+      return lhs
+    else
+      return tryToString(rhs, lhs)
+    end
+  else ---@cast lhs -MacroExpansion
+     ---@cast rhs MacroExpansion
+    if "string" == type(lhs)
+    then
+      return rhs:pushFront(lhs)
+    else
+      return tryToString(lhs, rhs)
+    end
+  end
 end
 
 -- * ==============================================================================================
@@ -369,7 +393,7 @@ lpp.MacroPart = MacroPart
 ---@param x any
 ---@return boolean
 MacroPart.isTypeOf = function(x)
-	return getmetatable(x) == MacroPart
+  return getmetatable(x) == MacroPart
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -382,20 +406,20 @@ end
 ---@param text string
 ---@return MacroPart
 MacroPart.new = function(source, start, stop, text)
-	return setmetatable(
-	{
-		source=source,
-		start=start,
-		stop=stop,
-		text=text,
-	}, MacroPart)
+  return setmetatable(
+  {
+    source=source,
+    start=start,
+    stop=stop,
+    text=text,
+  }, MacroPart)
 end
 
 -- * ----------------------------------------------------------------------------------------------
 
 --- Let MacroParts coerce to strings
 MacroPart.__tostring = function(self)
- 	return self.text
+  return self.text
 end
 
 -- * ----------------------------------------------------------------------------------------------
@@ -407,10 +431,10 @@ end
 ---@param rhs MacroPart | MacroExpansion | string
 ---@return MacroExpansion
 MacroPart.__concat = function(lhs, rhs)
-	if MacroExpansion.isTypeOf(rhs)
-	then return MacroExpansion.__concat(lhs, rhs)
-	else return MacroExpansion.__concat(lhs, MacroExpansion.new(rhs))
-	end
+  if MacroExpansion.isTypeOf(rhs)
+  then return MacroExpansion.__concat(lhs, rhs)
+  else return MacroExpansion.__concat(lhs, MacroExpansion.new(rhs))
+  end
 end
 
 return lpp

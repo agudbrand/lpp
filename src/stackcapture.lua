@@ -10,22 +10,25 @@ local List = require "list"
 
 ---@return List
 return function(offset)
-	local stack = List()
+  local stack = List()
+  offset = offset or 0
+  offset = offset + 2
 
-	local fidx = 2 + offset
-	while true do
-		local info = debug.getinfo(fidx)
-		if not info then break end
-		if info.what ~= "C" then
-			stack:push(
-			{
-				src = info.source,
-				line = info.currentline,
-				name = info.name
-			})
-		end
-		fidx = fidx + 1
-	end
+  local fidx = offset
+  while true do
+    local info = debug.getinfo(fidx)
+    if not info then break end
+    if info.what ~= "C" then
+      local tbl =
+      {
+        src = info.source,
+        line = info.currentline,
+        name = info.name
+      }
+      stack:push(tbl)
+    end
+    fidx = fidx + 1
+  end
 
-	return stack
+  return stack
 end
