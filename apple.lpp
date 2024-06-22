@@ -1,9 +1,0 @@
-
-void test()
-{
-	$ if DEBUG then
-		printf("debug\n");
-	$ else 
-		printf("release\n");
-	$ end
-}

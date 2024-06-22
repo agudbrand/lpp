@@ -25,8 +25,6 @@
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
-#include "generated/cliargs.h"
-
 // TODO(sushi) this is currently shared between here and lake.cpp, it should be moved to an arg helper
 //             in iro.
 struct ArgIter
