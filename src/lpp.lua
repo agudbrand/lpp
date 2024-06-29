@@ -34,9 +34,9 @@ local MacroExpansion,
     MacroPart,
     Section
 
--- * ==============================================================================================
+-- * ==========================================================================
 -- *   lpp
--- * ==============================================================================================
+-- * ==========================================================================
 
 --- API for interacting with lpp during the execution of a metaprogram.
 ---
@@ -47,35 +47,35 @@ local MacroExpansion,
 ---@field context userdata
 local lpp = {}
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 local lua_error = error
 error = function(msg)
   lua_error(msg, 0)
 end
 
--- patch lua's print with one that prefixes the message with the srcloc of the print
--- as print is only meant to be used for debug purposes and losing where they are is 
--- quite easy.
+-- Patch lua's print with one that prefixes the message with the srcloc of the 
+-- print as print is only meant to be used for debug purposes and losing where 
+-- they are is quite easy.
 local lua_print = print
 print = function(first, ...)
   local info = debug.getinfo(2)
   lua_print(info.source..":"..info.currentline..": "..tostring(first), ...)
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Get the indentation of the current macro as a string.
 ---
---- Good for keeping things nicely formatted in macro expansions that span multiple 
---- lines. Please use it ^_^.
+--- Good for keeping things nicely formatted in macro expansions that span 
+--- multiple lines. Please use it ^_^.
 ---
 ---@return string
 lpp.getMacroIndentation = function()
   return strToLua(C.metaprogramGetMacroIndent(lpp.context))
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Process the file at 'path' with lpp. 
 ---
@@ -95,7 +95,7 @@ lpp.processFile = function(path)
   return ffi.string(buf, mpb.memsize)
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Retrieve the section after the calling macro, or nil if none follows.
 ---
@@ -107,7 +107,7 @@ lpp.getSectionAfterMacro = function()
   end
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Get a string of the metaprogram's output so far.
 ---
@@ -116,20 +116,22 @@ lpp.getOutputSoFar = function()
   return strToLua(C.metaprogramGetOutputSoFar(lpp.context))
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
---- Consumes the current scope (macro invocation) and returns its result as a string.
+--- Consumes the current scope (macro invocation) and returns its result as a 
+--- string.
 ---
--- TODO(sushi) better document what exactly this is doing once its more clear to me 
+-- TODO(sushi) better document what exactly this is doing once its more clear 
+--             to me 
 --
 ---@return string
 lpp.consumeCurrentScope = function()
   return strToLua(C.metaprogramConsumeCurrentScopeString(lpp.context))
 end
 
--- * ==============================================================================================
+-- * ==========================================================================
 -- *   Section
--- * ==============================================================================================
+-- * ==========================================================================
 
 --- A part of the Document being processed. 
 ---
@@ -141,7 +143,7 @@ end
 Section = makeStruct()
 lpp.Section = Section
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 ---@private
 --
@@ -152,7 +154,7 @@ Section.new = function(handle)
   return setmetatable({handle=handle}, Section)
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Get the Section following this one, or nil if this is the last
 --- Section of the Document.
@@ -165,7 +167,7 @@ Section.getNextSection = function(self)
   end
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Get the Section preceeding this one, or nil if this is the first
 --- Section of the Document.
@@ -178,21 +180,23 @@ Section.getPrevSection = function(self)
   end
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Check if this Section is a Macro.
 ---
 ---@return boolean
 Section.isMacro = function(self) return 0 ~= C.sectionIsMacro(self.handle) end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Check if this Section is Document text.
 ---
 ---@return boolean
-Section.isDocument = function(self) return 0 ~= C.sectionIsDocument(self.handle) end
+Section.isDocument = function(self) 
+  return 0 ~= C.sectionIsDocument(self.handle) 
+end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Gets a lua string containing the contents of this Section.
 --- 
@@ -204,7 +208,7 @@ Section.getString = function(self)
   return strToLua(C.sectionGetString(self.handle))
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Insert text at the given offset in this section.
 ---
@@ -215,7 +219,7 @@ Section.insertString = function(self, offset, text)
   return 0 ~= C.sectionInsertString(self.handle, offset, luaToStr(text))
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Consume some bytes from the beginning of this section.
 ---
@@ -225,9 +229,9 @@ Section.consumeFromBeginning = function(self, len)
   return 0 ~= C.sectionConsumeFromBeginning(self.handle , len)
 end
 
--- * ==============================================================================================
+-- * ==========================================================================
 -- *   MacroExpansion
--- * ==============================================================================================
+-- * ==========================================================================
 
 --- The result of a macro invocation. This contains a sequence
 --- of either strings and/or MacroParts that form the buffer that 
@@ -242,7 +246,7 @@ end
 MacroExpansion = makeStruct()
 lpp.MacroExpansion = MacroExpansion
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Check if 'x' is a MacroExpansion.
 ---
@@ -252,7 +256,7 @@ MacroExpansion.isTypeOf = function(x)
   return getmetatable(x) == MacroExpansion
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Construct a new MacroExpansion.
 ---
@@ -267,7 +271,7 @@ MacroExpansion.new = function(...)
   }, MacroExpansion)
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Push a string or MacroPart to the front of this expansion.
 ---
@@ -278,7 +282,7 @@ MacroExpansion.pushFront = function(self, v)
   return self
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Push a string or MacroPart to the back of this expansion.
 ---
@@ -289,7 +293,7 @@ MacroExpansion.pushBack = function(self, v)
   return self
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 ---@private
 -- Call metamethod used internally to easily finalize a macro expansion.
@@ -312,7 +316,7 @@ MacroExpansion.__call = function(self, offset)
   return out:get()
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Override the concat operator to make MacroExpansion sorta able to 
 --- behave like a normal string, in the same way MacroPart does. 
@@ -333,14 +337,16 @@ end
 ---@return MacroExpansion
 MacroExpansion.__concat = function(lhs, rhs)
   local tryToString = function(from, to)
-    assert(getmetatable(from), "attempt to concatenate a plain table with a MacroExpansion!")
+    assert(getmetatable(from),
+      "attempt to concatenate a plain table with a MacroExpansion!")
     assert(getmetatable(from).__tostring,
-      "attempt to concatenate a table with no '__tostring' method with a MacroExpansion!")
+      "attempt to concatenate a table with no '__tostring' method with a "..
+      "MacroExpansion!")
 
     return to:pushBack(tostring(from))
   end
 
-  if MacroExpansion.isTypeOf(lhs) 
+  if MacroExpansion.isTypeOf(lhs)
   then ---@cast lhs -string
     if MacroPart.isTypeOf(rhs) or
        "string" == type(rhs)
@@ -366,16 +372,16 @@ MacroExpansion.__concat = function(lhs, rhs)
   end
 end
 
--- * ==============================================================================================
+-- * ==========================================================================
 -- *   MacroPart
--- * ==============================================================================================
+-- * ==========================================================================
 
 --- A part of a MacroExpansion that contains the text to expand and information 
 --- that can be used to determine where that text comes from.
 ---
 ---@class MacroPart
---- A string naming where this part comes from. This may be any name, but ideally
---- it is a path relative to the file the macro is being invoked in.
+--- A string naming where this part comes from. This may be any name, but 
+--- ideally it is a path relative to the file the macro is being invoked in.
 ---@field source string 
 --- The byte offset into 'source' where this part begins.
 ---@field start number
@@ -386,7 +392,7 @@ end
 MacroPart = makeStruct()
 lpp.MacroPart = MacroPart
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Check if 'x' is a MacroPart
 ---
@@ -396,7 +402,7 @@ MacroPart.isTypeOf = function(x)
   return getmetatable(x) == MacroPart
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Construct a new MacroPart
 ---
@@ -415,14 +421,14 @@ MacroPart.new = function(source, start, stop, text)
   }, MacroPart)
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Let MacroParts coerce to strings
 MacroPart.__tostring = function(self)
   return self.text
 end
 
--- * ----------------------------------------------------------------------------------------------
+-- * --------------------------------------------------------------------------
 
 --- Consume a MacroPart and a string/MacroPart into a MacroExpansion or 
 --- give this MacroPart to a MacroExpansion.

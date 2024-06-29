@@ -9,6 +9,8 @@ options.registerCleaner(function()
   lake.rm(build_dir, {recursive = true, force = options.force_clean})
 end)
 
+options.dependsOnProj "iro"
+
 lake.mkdir(build_dir, {make_parents = true})
 
 local report  = assert(options.report)
@@ -26,7 +28,7 @@ report.executable(tostring(lpp))
 local cflags = List
 {
   "-Isrc",
-  options.getProjIncludeDirFlags "iro",
+  options.getDependencyCompilerFlags(),
   "-fvisibility=hidden",
 }
 
@@ -45,13 +47,17 @@ end
 
 local lflags = List
 {
+  options.getDependencyLinkerFlags(),
   options.getProjLibs "luajit",
+  "-ldeflate",
+  "-lunistring",
+  "-lncurses",
   "-Wl,-E",
 }
 
-if reports.lppclang then
-  lflags:push(options.getProjLibs "lppclang")
-end
+-- if reports.lppclang then
+--   lflags:push(options.getProjLibs "lppclang")
+-- end
 
 local c_files = lake.find("src/**/*.cpp")
 
@@ -72,7 +78,6 @@ end
 
 local ofiles = lake.flatten { reports.lpp.objFiles, reports.iro.objFiles }
 
-
 lake.find("src/*.lua"):each(function(lfile)
   local ofile = lfile:gsub("(.-)%.lua", build_dir.."%1.lua.o")
   report.objFile(ofile)
@@ -86,7 +91,7 @@ lake.find("src/*.lua"):each(function(lfile)
     :recipe(recipes.luaToObj(lfile, ofile))
 end)
 
-lpp:dependsOn(ofiles):recipe(recipes.linker(ofiles, lpp, lflags))
+lpp:dependsOn{ofiles, options.this_file}:recipe(recipes.linker(ofiles, lpp, lflags))
 
 options.getProjLibs("luajit"):each(function(e)
   lpp:dependsOn(e)

@@ -13,6 +13,8 @@
 
 #include "string.h"
 
+#include "iro/term.h"
+
 #include "iro/process.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
@@ -91,7 +93,10 @@ int main(int argc, const char** argv)
         | PrefixNewlines);
   }
 
-  // return 0;
+  Term term;
+  term.test();
+
+  return 0;
 
   // TODO(sushi) actual cli args in lpp, especially when we get to supporting an lsp 
   str file = nil;
