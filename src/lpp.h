@@ -35,9 +35,17 @@ struct Lpp
   DLinkedPool<Metaprogram> metaprograms;
   DLinkedPool<Source> sources;
 
-    b8   init();
+  b8 initialized;
+
+  str input;
+  str output;
+
+  b8   init();
   void deinit();
 
+  b8 run();
+
+  b8 processArgv(int argc, const char** argv);
   b8 processStream(str name, io::IO* instream, io::IO* outstream);
 }; 
 

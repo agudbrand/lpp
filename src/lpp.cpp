@@ -2,6 +2,7 @@
 
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
+#include "iro/argiter.h"
 
 #include "assert.h"
 
@@ -40,6 +41,9 @@ b8 Lpp::init()
     return false;
   }
 
+  input = output = nil;
+
+  DEBUG("loading lpp lua module\n");
   if (!lua.require("lpp"_str))
     return false;
 
@@ -49,7 +53,10 @@ b8 Lpp::init()
   lua.settable(lua.gettop()-2);
   lua.pop();
 
-    return true;
+  DEBUG("done initializing\n");
+  initialized = true;
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -67,6 +74,162 @@ void Lpp::deinit()
   metaprograms.deinit();
 
   *this = {};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lpp::run()
+{
+  DEBUG("run\n");
+
+  using namespace fs;
+
+  if (isnil(input))
+  {
+    FATAL("no input file specified\n");
+    return false;
+  }
+
+  File inf = File::from(input, OpenFlag::Read);
+  if (isnil(inf))
+  {
+    FATAL("failed to open input file at path '", input, "'\n");
+    return false;
+  }
+  defer { inf.close(); };
+
+  File outf;
+  if (isnil(output))
+  {
+    outf = fs::stdout;
+  }
+  else
+  {
+    outf = File::from(output, 
+          OpenFlag::Create
+        | OpenFlag::Write
+        | OpenFlag::Truncate);
+  }
+  if (isnil(outf))
+  {
+    FATAL("failed to open output file at path '", output, "'\n");
+    return false;
+  }
+  defer { outf.close(); };
+  
+  if (!processStream(input, &inf, &outf))
+    return false;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lpp::processArgv(int argc, const char** argv)
+{
+  DEBUG("processing argv\n");
+
+  // Handle cli args that lpp recognizes and store the rest in a lua table 
+  // to be handled by the metaprogram.
+  if (!lua.require("lpp"_str))
+    return false;
+  const s32 I_lpp = lua.gettop();
+
+  lua.newtable();
+  const s32 I_argv_table = lua.gettop();
+
+  lua.pushstring("argv"_str);
+  lua.pushvalue(I_argv_table);
+  lua.settable(I_lpp);
+
+  lua.getglobal("table");
+  const s32 I_table = lua.gettop();
+
+  lua.pushstring("insert"_str);
+  lua.gettable(I_table);
+  const s32 I_table_insert = lua.gettop();
+
+  ArgIter iter(argv, argc);
+
+  auto passthroughToLua = [=, &iter, this]()
+  {
+    lua.pushvalue(I_table_insert);
+    lua.pushvalue(I_argv_table);
+    lua.pushstring(iter.current);
+    lua.pcall(2, 0);
+  };
+
+  auto handleDoubleDash = [=, &iter, this]() -> b8
+  {
+    str arg = iter.current.sub(2);
+    switch (arg.hash())
+    {
+    default:
+      passthroughToLua();
+    }
+    
+    return true;
+  };
+
+  auto handleSingleDash = [=, &iter, this]() -> b8
+  {
+    str arg = iter.current.sub(1);
+    switch(arg.hash())
+    {
+
+    case "o"_hashed:
+      if (notnil(output))
+      {
+        FATAL("output already specified as '", output, "'\n");
+        return false;
+      }
+      iter.next();
+      if (isnil(iter.current))
+      {
+        FATAL("expected an output path after '-o'\n");
+        return false;
+      }
+      output = iter.current;
+      break;
+
+    default:
+      passthroughToLua();
+    }
+
+    return true;
+  };
+
+  for (;notnil(iter.current); iter.next())
+  {
+    str arg = iter.current;
+    
+    if (arg.bytes[0] == '-')
+    {
+      if (arg.bytes[1] == '-')
+      {
+        if (!handleDoubleDash())
+          return false;
+      }
+      else
+      {
+        if (!handleSingleDash())
+          return false;
+      }
+    }
+    else
+    {
+      if (isnil(input))
+      {
+        input = iter.current;
+      }
+      else
+      {
+        passthroughToLua();
+      }
+    }
+  }
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
