@@ -56,6 +56,7 @@ ffi.cdef
   str cursorGetRestOfSection(Cursor* cursor);
   SectionNode* cursorGetSection(Cursor* cursor);
 
+  SectionNode* metaprogramGetCurrentSection(Metaprogram* mp);
   SectionNode* metaprogramGetNextSection(Metaprogram* ctx);
 
   SectionNode* sectionNext(SectionNode* section);

@@ -215,7 +215,7 @@ private:
     s32 prev_context;
     s32 metaenv_table;
     s32 macro_table;
-    s32 MacroExpansion_isTypeOf;
+    s32 lpp_runDocumentSectionCallbacks;
   } I;
 };
 

@@ -31,8 +31,8 @@ local makeStruct = function()
 end
 
 local MacroExpansion,
-    MacroPart,
-    Section
+      MacroPart,
+      Section
 
 -- * ==========================================================================
 -- *   lpp
@@ -45,7 +45,32 @@ local MacroExpansion,
 ---@field handle userdata 
 --- Handle to the currently executing metaprogram's 'context'.
 ---@field context userdata
+--- List of callbacks to executed in reverse order on each Document 
+--- section as we reach them.
+---@field doc_callbacks List
 local lpp = {}
+
+-- * --------------------------------------------------------------------------
+
+lpp.doc_callbacks = List{}
+lpp.runDocumentSectionCallbacks = function()
+  if lpp.doc_callbacks:isEmpty() then return end
+
+  local section = lpp.getCurrentSection()
+  lpp.doc_callbacks:each(function(f)
+    f(section)
+  end)
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Registers a callback to be invoked at the beginning of each Document
+--- section. It will be invoked before any callbacks registered before it.
+---
+---@param f function
+lpp.registerDocumentSectionCallback = function(f)
+  lpp.doc_callbacks:push(f)
+end
 
 -- * --------------------------------------------------------------------------
 
@@ -93,6 +118,18 @@ lpp.processFile = function(path)
   C.getMetaprogramResult(mpb, buf)
 
   return ffi.string(buf, mpb.memsize)
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Retrieve the current section.
+---
+---@return Section?
+lpp.getCurrentSection = function()
+  local s = C.metaprogramGetCurrentSection(lpp.context)
+  if s ~= nil then
+    return Section.new(s)
+  end
 end
 
 -- * --------------------------------------------------------------------------
