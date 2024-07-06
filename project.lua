@@ -38,7 +38,7 @@ cpp_driver.defines = proj:collectDefines()
 lake.find("src/**/*.cpp"):each(function(cfile)
   local ofile = builddir..cfile..".o"
   local dfile = builddir..cfile..".d"
-  -- cfile = cwd.."/"..cfile
+  cfile = cwd.."/"..cfile
 
   proj:reportObjFile(ofile)
 
@@ -58,7 +58,7 @@ local lua_driver = Driver.LuaObj.new()
 
 lake.find("src/*.lua"):each(function(lfile)
   local ofile = builddir..lfile..".o"
-  -- lfile = cwd.."/"..lfile
+  lfile = cwd.."/"..lfile
 
   proj:reportObjFile(ofile)
 
@@ -73,9 +73,17 @@ lpp:dependsOn(proj:collectObjFiles())
 
 local link_driver = Driver.Linker.new()
 
+local inputs = proj:collectObjFiles()
+
+local lppclang = enosi.getProject("lppclang")
+if lppclang then
+  lpp:dependsOn(lppclang:getLuaObjFiles())
+  inputs:push(lppclang:getLuaObjFiles())
+end
+
 link_driver.static_libs = proj:collectStaticLibs()
 link_driver.shared_libs = proj:collectSharedLibs()
-link_driver.inputs = proj:collectObjFiles()
+link_driver.inputs = inputs
 link_driver.libdirs = proj:collectLibDirs()
 link_driver.output = lpp.path
 
