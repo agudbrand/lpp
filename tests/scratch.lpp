@@ -1,70 +1,14 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
 $ require "lppclang" .init("../lppclang/build/debug/liblppclang.so")
-
+$$$
+  local List = require "list"
+  List(lpp.argv):each(function(arg)
+    print(arg)
+  end)
 $$$
 
-local clang = lpp.clang.createContext()
-
-local List = require "list"
-
-local Component = {}
-
-local component = function()
-	local lex = clang:lexSection(lpp.getSectionAfterMacro())
-	
-	local expect = function(x, msg)
-		lex:next()
-		if not lex:at(x) then
-			if msg then
-				error("expected "..msg)
-			else
-				error("expected "..tostring(x))
-			end
-		end
-		return lex:curtRaw()
-	end
-
-	local name = expect(lex.identifier)
-	local comp = {}
-	Component[name] = comp
-
-	comp.fields = {list=List(), table={}}
-
-	expect "{"
-
-	local parseField = function()
-		local field = {}
-		field.name = lex:curtRaw()
-
-		comp.fields[field.name] = field
-		table.insert(comp.fields, field)
-
-		expect ":"
-
-		field.type = expect(lex.identifier, "identifier for type of field '"..field.name.."'")
-
-		return field
-	end
-
-	local parseFieldAnnotations = function(field)
-
-	end
-
-	lex:next()
-	while true do
-		if lex:at(lex.identifier) then
-			parseField()
-			expect ";"
-		end
-		if not lex:next() or lex:at "}" then break end
-	end
-end
-
-$$$
-
-@component Transform
+int main()
 {
-	pos: vec2 !networked;
 
 }
