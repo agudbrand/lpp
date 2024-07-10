@@ -9,13 +9,19 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 Section::initDocument(u64 start_offset_, str raw, SectionNode* node_)
+b8 Section::initDocument(
+    u64 start_offset_, 
+    str raw, 
+    SectionNode* node_,
+    io::Memory* buffer)
 {
+  assert(buffer);
+  this->buffer = buffer;
   node = node_;
   start_offset = start_offset_;
-  if (!mem.open(raw.len))
+  if (!buffer->open(raw.len))
     return false;
-  mem.write(raw);
+  buffer->write(raw);
   kind = Kind::Document;
   return true;
 }
@@ -46,27 +52,28 @@ void Section::deinit()
     return;
 
   case Kind::Document:
-    mem.close();
+    buffer = nullptr;
     break;
   }
 
   node = nullptr;
+  kind = Kind::Invalid;
 }
 
 /* ----------------------------------------------------------------------------
  */
 b8 Section::insertString(u64 offset, str s)
 {
-  assert(offset <= mem.len);
+  assert(offset <= buffer->len);
 
-  mem.reserve(s.len + 1);
-  mem.commit(s.len + 1);
+  buffer->reserve(s.len + 1);
+  buffer->commit(s.len + 1);
 
   mem::move(
-      mem.buffer + offset + s.len, 
-      mem.buffer + offset, 
-      mem.len - offset);
-  mem::copy(mem.buffer + offset, s.bytes, s.len);
+    buffer->buffer + offset + s.len, 
+    buffer->buffer + offset, 
+    buffer->len - offset);
+  mem::copy(buffer->buffer + offset, s.bytes, s.len);
 
   return true;
 }
@@ -75,19 +82,19 @@ b8 Section::insertString(u64 offset, str s)
  */
 b8 Section::consumeFromBeginning(u64 len)
 {
-  if (len > mem.len)
+  if (len > buffer->len)
     return false;
 
-  if (len == mem.len)
+  if (len == buffer->len)
   {
-    mem.clear();
+    buffer->clear();
     return true;
   }
 
   // idk man find a way to not move shit around later maybe with just a str ? 
   // idk we edit stuff too much and IDRC at the moment!!!
-  mem::move(mem.buffer, mem.buffer + len, mem.len - len);
-  mem.len -= len;
+  mem::move(buffer->buffer, buffer->buffer + len, buffer->len - len);
+  buffer->len -= len;
   return true;
 }
 
@@ -191,7 +198,7 @@ void Metaprogram::addDocumentSection(u64 start, str raw)
 {
   auto node = getCurrentScope()->sections.pushTail();
   node->data = sections.pushTail()->data;
-  node->data->initDocument(start, raw, node);
+  node->data->initDocument(start, raw, node, buffers.push()->data);
 }
 
 /* ----------------------------------------------------------------------------
@@ -203,6 +210,8 @@ void Metaprogram::addMacroSection(s64 start, str indent, u64 macro_idx)
   node->data->initMacro(start, indent, macro_idx, node);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 static void printExpansion(Source* input, Source* output, Expansion& expansion)
 {
   input->cacheLineOffsets();
@@ -456,7 +465,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
           return false;
 
         // Simple write to the output cache.
-        scope->writeBuffer(section->mem.asStr());
+        scope->writeBuffer(section->buffer->asStr());
       }  
       break;
 
@@ -595,7 +604,7 @@ Cursor* metaprogramNewCursorAfterSection(Metaprogram* mp)
   Cursor* cursor = mp->cursors.add();
   cursor->creator = mp->current_section->next;
   cursor->section = cursor->creator;
-  cursor->range = cursor->section->data->mem.asStr();
+  cursor->range = cursor->section->data->buffer->asStr();
   cursor->current_codepoint = 
     utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
   return cursor;
@@ -694,15 +703,15 @@ b8 cursorInsertString(Cursor* cursor, str text)
   if (s->kind != Section::Kind::Document)
     return false;
   
-  assert(cursor->range.bytes >= s->mem.buffer);
+  assert(cursor->range.bytes >= s->buffer->buffer);
 
-  u64 cursor_offset = cursor->range.bytes - s->mem.buffer;
+  u64 cursor_offset = cursor->range.bytes - s->buffer->buffer;
 
   if (!s->insertString(cursor_offset, text))
     return false;
 
-  u8* new_pos = s->mem.buffer + cursor_offset + text.len;
-  u64 new_len = (s->mem.buffer + s->mem.len) - new_pos;
+  u8* new_pos = s->buffer->buffer + cursor_offset + text.len;
+  u64 new_len = (s->buffer->buffer + s->buffer->len) - new_pos;
   cursor->range = {new_pos, new_len};
 
   return true;
@@ -746,7 +755,7 @@ SectionNode* metaprogramGetCurrentSection(Metaprogram* mp)
 LPP_LUAJIT_FFI_FUNC
 str sectionGetString(SectionNode* section)
 {
-  return section->data->mem.asStr();
+  return section->data->buffer->asStr();
 }
 
 /* ----------------------------------------------------------------------------

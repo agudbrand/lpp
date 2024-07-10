@@ -44,7 +44,7 @@ struct Section
 
   u64 start_offset = -1;
 
-  io::Memory mem = {};
+  io::Memory* buffer = nullptr;
 
   SectionNode* node = nullptr;
 
@@ -56,12 +56,18 @@ struct Section
   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
-  b8 initDocument(u64 start_offset, str raw, SectionNode* node);
+  b8 initDocument(
+      u64 start_offset, 
+      str raw, 
+      SectionNode* node,
+      io::Memory* buffer);
+
   b8 initMacro(
       u64 start_offset, 
       str macro_indent, 
       u64 macro_idx, 
       SectionNode* node);
+
   void deinit();
 
   b8 insertString(u64 start, str s);
@@ -128,7 +134,7 @@ struct Scope
   // Null when this is the global scope.
   Section* macro_invocation;
 
-  // NOTE(sushi) its assumed the passed buffer is open already.
+  // NOTE(sushi) its assumed the passed buffer is already open.
   b8   init(Scope* prev, io::Memory* buffer, Section* macro_invocation);
   void deinit();
 
@@ -154,6 +160,10 @@ struct Metaprogram
   io::IO* instream;
   Source* input;
   Source* output;
+
+  // Section we stream the result of the metaprogram into. This is stored as
+  // a Section so that the user can modify it using the same api.
+  Section output_section; 
 
   SectionNode* current_section;
 

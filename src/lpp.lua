@@ -45,9 +45,11 @@ local MacroExpansion,
 ---@field handle userdata 
 --- Handle to the currently executing metaprogram's 'context'.
 ---@field context userdata
---- List of callbacks to executed in reverse order on each Document 
+--- List of callbacks to be executed in reverse order on each Document 
 --- section as we reach them.
 ---@field doc_callbacks List
+--- List of callbacks to be executed in reverse order on the final result.
+---@field final_callbacks List
 local lpp = {}
 
 -- * --------------------------------------------------------------------------
@@ -60,6 +62,15 @@ lpp.runDocumentSectionCallbacks = function()
   lpp.doc_callbacks:each(function(f)
     f(section)
   end)
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.final_callbacks = List{}
+lpp.runFinalCallbacks = function()
+  if lpp.final_callbacks:isEmpty() then return end
+
+  
 end
 
 -- * --------------------------------------------------------------------------
