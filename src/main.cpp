@@ -1,21 +1,8 @@
-#include "iro/common.h"
-
 #include "lpp.h"
 
-#include "stdlib.h"
-#include "stdarg.h"
-
-#include "iro/io/io.h"
 #include "iro/fs/fs.h"
-#include "iro/traits/scoped.h"
-
+#include "iro/common.h"
 #include "iro/logger.h"
-
-#include "string.h"
-
-#include "iro/term.h"
-
-#include "iro/process.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
@@ -37,13 +24,27 @@ int main(int argc, const char** argv)
 
   {
     using enum Log::Dest::Flag;
-    iro::log.newDestination("stdout"_str, &fs::stdout, 
-          AllowColor 
+    Log::Dest::Flags flags;
+
+    if (fs::stdout.isatty())
+    {
+      flags = 
+          AllowColor
         | ShowCategoryName
         | ShowVerbosity
         | TrackLongestName
         | PadVerbosity
-        | PrefixNewlines);
+        | PrefixNewlines;
+    }
+    else
+    {
+      flags = 
+          ShowCategoryName
+        | ShowVerbosity
+        | PrefixNewlines;
+    }
+
+    iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
   Lpp lpp = {}; 
