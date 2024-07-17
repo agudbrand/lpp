@@ -4,6 +4,8 @@
 #include "iro/fs/fs.h"
 #include "iro/argiter.h"
 
+#include "lsp/server.h"
+
 #include "assert.h"
 
 #include "metaprogram.h"
@@ -35,7 +37,7 @@ b8 Lpp::init()
   metaprograms.init();
 
   DEBUG("loading luajit ffi\n");
-  if (!lua.dofile("src/cdefs.lua"))
+  if (!lua.require("cdefs"_str))
   {
     ERROR("failed to load luajit ffi\n");
     return false;
@@ -78,11 +80,27 @@ void Lpp::deinit()
 
 /* ----------------------------------------------------------------------------
  */
+static b8 runLsp(Lpp* lpp)
+{
+  lsp::Server server;
+
+  if (!server.init(lpp))
+    return false;
+  defer { server.deinit(); };
+
+  return server.loop();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Lpp::run()
 {
   DEBUG("run\n");
 
   using namespace fs;
+
+  if (lsp)
+    return runLsp(this);
 
   if (isnil(input))
   {
@@ -121,6 +139,30 @@ b8 Lpp::run()
     return false;
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void makeLspTempOut()
+{
+  using namespace fs;
+  using enum OpenFlag;
+  using enum Log::Dest::Flag;
+
+  auto f = mem::stl_allocator.construct<File>();
+  *f = 
+    File::from("lpplsp.log"_str, 
+        Write
+      | Truncate
+      | Create);
+  if (isnil(*f))
+  {
+    ERROR("failed to open lpplsp.log\n");
+    return;
+  }
+  log.newDestination("lpplsp.log"_str, f,
+        ShowCategoryName
+      | ShowVerbosity);
 }
 
 /* ----------------------------------------------------------------------------
@@ -164,6 +206,9 @@ b8 Lpp::processArgv(int argc, const char** argv)
     str arg = iter.current.sub(2);
     switch (arg.hash())
     {
+    case "lsp"_hashed:
+      lsp = true;
+      makeLspTempOut();
     default:
       passthroughToLua();
     }

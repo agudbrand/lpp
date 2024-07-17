@@ -40,6 +40,9 @@ struct Lpp
   str input;
   str output;
 
+  // True when we should run in lsp mode (--lsp).
+  b8 lsp;
+
   b8   init();
   void deinit();
 

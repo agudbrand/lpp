@@ -44,7 +44,7 @@ int main(int argc, const char** argv)
         | PrefixNewlines;
     }
 
-    iro::log.newDestination("stdout"_str, &fs::stdout, flags);
+    iro::log.newDestination("stderr"_str, &fs::stderr, flags);
   }
 
   Lpp lpp = {}; 

@@ -273,9 +273,9 @@ b8 Metaprogram::run()
   {
     auto f = 
       scoped(fs::File::from("temp/parsed"_str, 
-            fs::OpenFlag::Create 
-          | fs::OpenFlag::Write 
-          | fs::OpenFlag::Truncate));
+          fs::OpenFlag::Create 
+        | fs::OpenFlag::Write 
+        | fs::OpenFlag::Truncate));
     f.write(parsed_program.asStr());
   }
 

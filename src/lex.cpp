@@ -8,8 +8,6 @@
 static Logger logger = 
   Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
-
-
 /* ----------------------------------------------------------------------------
  */
 u32 Lexer::current() { return current_codepoint.codepoint; }
@@ -71,14 +69,14 @@ void Lexer::advance(s32 n)
   {
     current_offset += current_codepoint.advance;
 
-        if (!readStreamIfNeeded())
+    if (!readStreamIfNeeded())
       return;
 
-        if (!decodeCurrent())
-        {
-            errorHere("encountered invalid codepoint!");
-            longjmp(err_handler, 0);
-        }
+    if (!decodeCurrent())
+    {
+      errorHere("encountered invalid codepoint!");
+      longjmp(err_handler, 0);
+    }
 
     if (at('\n'))
     {
@@ -89,16 +87,8 @@ void Lexer::advance(s32 n)
       if (not isspace(current()))
         in_indentation = false;
     }
-        
-  }
-}
 
-/* ----------------------------------------------------------------------------
- */
-void Lexer::skipWhitespace()
-{
-  while (isspace(current()))
-    advance();
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -132,15 +122,23 @@ b8 Lexer::errorHere(T... args)
 
 /* ----------------------------------------------------------------------------
  */
+void Lexer::skipWhitespace()
+{
+  while (isspace(current()))
+    advance();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Lexer::init(io::IO* input_stream, Source* src)
 {
-    assert(input_stream and src);
+  assert(input_stream and src);
 
-    TRACE("initializing with input stream '", src->name, "'\n");
+  TRACE("initializing with input stream '", src->name, "'\n");
   SCOPED_INDENT;
 
   tokens = TokenArray::create();
-    in = input_stream;
+  in = input_stream;
   source = src;
   at_end = false;
   current_offset = 0;
@@ -178,8 +176,8 @@ b8 Lexer::run()
     s32 trailing_space_len = 0;
 
     while (not at('@') and
-         not at('$') and
-         not eof())
+           not at('$') and
+           not eof())
     {
 
       if (trailing_space_len == 0)

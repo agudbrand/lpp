@@ -4,9 +4,10 @@
 
 #include "ctype.h"
 
-static Logger logger = Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
+static Logger logger = 
+  Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Parser::init(
     Source* src,
@@ -41,7 +42,7 @@ b8 Parser::init(
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Parser::deinit()
 {
@@ -49,7 +50,7 @@ void Parser::deinit()
   *this = {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 template<typename... T>
 void Parser::writeOut(T... args)
@@ -57,7 +58,7 @@ void Parser::writeOut(T... args)
   bytes_written += io::formatv(out, args...);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Parser::run()
 {
@@ -81,7 +82,8 @@ b8 Parser::run()
         return false;
 
       case Document:
-        TRACE("placing document text: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+        TRACE("placing document text: '", 
+              io::SanitizeControlCharacters(getRaw()), "'\n");
         {
           str raw = getRaw();
           u64 from = curt->loc;
@@ -113,7 +115,8 @@ b8 Parser::run()
         break;
 
       case LuaBlock:
-        TRACE("placing lua block: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+        TRACE("placing lua block: '", 
+              io::SanitizeControlCharacters(getRaw()), "'\n");
         {
           str raw = getRaw();
           locmap.push({.from = bytes_written, .to = curt->loc});
@@ -128,14 +131,16 @@ b8 Parser::run()
         break;
 
       case LuaLine:
-        TRACE("placing lua line: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+        TRACE("placing lua line: '", 
+              io::SanitizeControlCharacters(getRaw()), "'\n");
         locmap.push({.from = bytes_written, .to = curt->loc-1});
         writeOut(getRaw(), "\n");
         nextToken();
         break;
 
       case LuaInline:
-        TRACE("placing lua inline: '", io::SanitizeControlCharacters(getRaw()), "'\n");
+        TRACE("placing lua inline: '", 
+              io::SanitizeControlCharacters(getRaw()), "'\n");
         locmap.push({.from = bytes_written, .to = curt->loc});
         writeOut("__metaenv.val("_str, curt->loc, ",", getRaw(), ")\n"_str);
         nextToken();
@@ -187,7 +192,7 @@ b8 Parser::run()
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Parser::nextToken()
 {
@@ -195,14 +200,14 @@ b8 Parser::nextToken()
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 Parser::at(Token::Kind kind)
 {
   return curt->kind == kind;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 str Parser::getRaw()
 {

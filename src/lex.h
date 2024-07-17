@@ -39,22 +39,19 @@ struct Token
     Document, 
   };
 
-  Kind kind;
+  Kind kind = Kind::Invalid;
 
-    s32 loc;
-  s32 len;
+  s32 loc = 0;
+  s32 len = 0;
 
-  s32 macro_indent_loc;
-  s32 macro_indent_len;
-
-  static Token invalid() { return {Kind::Invalid}; }
-
-    b8 isValid() { return kind != Kind::Invalid; }
+  s32 macro_indent_loc = 0;
+  s32 macro_indent_len = 0;
 
   // retrieve the raw string this token encompasses from the given Source
   str getRaw(Source* src) { return src->getStr(loc, len); }
 };
 
+DefineNilValue(Token, {}, { return x.kind == Token::Kind::Invalid; });
 
 /* ============================================================================
  *
@@ -76,20 +73,20 @@ struct Lexer
   u64 current_offset;
 
   Source* source;
-    io::IO* in;
+  io::IO* in;
 
   TokenArray tokens;
 
   b8 in_indentation;
-
   b8 at_end;
 
   jmp_buf err_handler; // this is 200 bytes !!!
 
   b8   init(io::IO* input_stream, Source* src);
-    void deinit();
+  void deinit();
         
   b8 run();
+
 
 private:
 
@@ -102,7 +99,6 @@ private:
   void finishCurt(Token::Kind kind, s32 len_offset = 0);
 
   u32 current();
-    u8* currentptr();
 
   b8 at(u8 c);
   b8 eof();
