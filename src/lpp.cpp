@@ -88,9 +88,6 @@ static b8 runLsp(Lpp* lpp)
 {
   DEBUG("running lsp\n");
 
-  DEBUG("pid is: ", getpid(), "\n");
-  raise(SIGSTOP);
-
   lsp::Server server;
 
   if (!server.init(lpp))

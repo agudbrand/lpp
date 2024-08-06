@@ -658,7 +658,7 @@ NumericEnum.new = function(json)
           "++"..idx)
         do
           c:append("Value* "..elem.." = "..values.."["..idx.."];")
-          c:beginIf(elem.."->kind != Value::Kind::String")
+          c:beginIf(elem.."->kind != Value::Kind::Number")
           do
             c:append(
               "ERROR(\"unexpected type in numeric enum set, wanted number "..
@@ -936,7 +936,7 @@ CC "WorkspaceEdit"
   .Table "changeAnnotationSupport"
     .Bool "groupsOnLabel"
     :done()
-  .ResourceOperationKind "resourceOperations"
+  .ResourceOperationKind.Set "resourceOperations"
   .FailureHandlingKind "failureHandling"
   :done()
 
@@ -1160,6 +1160,28 @@ CC "TextDocument"
   .InlayHintClientCapabilities "inlayHint"
   .DiagnosticClientCapabilities "diagnostic"
 
+CC "ShowMessageRequest"
+  .Table "messageActionItem"
+    .Bool "additionalPropertiesSupport"
+    :done()
+
+CC "ShowDocument"
+  .Bool "support"
+
+CC "RegularExpressions"
+  .String "engine"
+  .String "version"
+
+CC "Markdown"
+  .String "parser"
+  .String "version"
+  .StringArray "allowedTags"
+
+json.StringedEnum "PositionEncodingKind"
+  { UTF8  = "utf-8"  }
+  { UTF16 = "utf-16" }
+  { UTF32 = "utf-32" }
+
 json.Schema "ClientCapabilities"
   .Table "workspace"
     .Bool "applyEdit"
@@ -1185,6 +1207,21 @@ json.Schema "ClientCapabilities"
     .InlayHintWorkspaceClientCapabilities "inlayHint"
     .DiagnosticWorkspaceClientCapabilities "diagnostics"
     :done()
+  .Table "window"
+    .Bool "workDoneProgress"
+    .ShowMessageRequestClientCapabilities "showMessage"
+    .ShowDocumentClientCapabilities "showDocument"
+    :done()
+  .Table "general"
+    .Table "staleRequestSupport"
+      .Bool "cancal"
+      .StringArray "retryOnContentModified"
+      :done()
+    .RegularExpressionsClientCapabilities "regularExpressions"
+    .MarkdownClientCapabilities "markdown"
+    .PositionEncodingKind.Set "positionEncodings"
+    :done()
+  .TextDocumentClientCapabilities "textDocument"
 
 json.Schema "InitializeParams"
   .Int "processId"
@@ -1194,6 +1231,7 @@ json.Schema "InitializeParams"
     :done()
   .String "locale"
   .String "rootUri"
+  .String "rootPath"
   .ClientCapabilities "capabilities"
   :done()
 

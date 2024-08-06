@@ -56,6 +56,31 @@ b8 parseTestFile(Server* server)
 
   json.prettyPrint(&fs::stdout);
 
+  mem::LenientBump bump;
+  if (!bump.init())
+  {
+    ERROR("failed to initialize bump allocator for deserialization\n");
+    return false;
+  }
+
+  json::Value* params_value = json.root->object.findMember("params"_str);
+  if (!params_value)
+  {
+    ERROR("jsonrpc did not have 'params' member\n");
+    return false;
+  }
+
+  InitializeParams init_params;
+
+  if (!deserializeInitializeParams(
+        &bump, 
+        &params_value->object, 
+        &init_params))
+  {
+    ERROR("failed to deserialize InitializeParams\n");
+    return false;
+  }
+
   return true;
 }
 
@@ -67,6 +92,9 @@ b8 Server::loop()
   buffer.open();
 
   return parseTestFile(this);
+
+  // DEBUG("pid is: ", getpid(), "\n");
+  // raise(SIGSTOP);
 
   DEBUG("entering server loop\n");
 
