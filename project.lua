@@ -3,8 +3,6 @@ local recipes = require "recipes"
 local Driver = require "driver"
 local proj = enosi.thisProject()
 
-local List = require "list"
-
 local mode = enosi.mode
 local cwd = lake.cwd()
 
@@ -70,6 +68,14 @@ lake.find("src/*.lua"):each(function(lfile)
 end)
 
 lpp:dependsOn(proj:collectObjFiles())
+
+local lua_script_driver = Driver.LuaScript.new()
+lua_script_driver.input = "src/scripts/lsp.lua"
+local lua_script_output = "src/generated/lsp.h"
+
+lake.target(lua_script_output)
+  :dependsOn(lua_script_driver.input)
+  :recipe(recipes.luaScript(lua_script_driver, proj, lua_script_output))
 
 local link_driver = Driver.Linker.new()
 
