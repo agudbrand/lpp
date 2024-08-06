@@ -38,7 +38,7 @@ Union.new = function(prev, json)
   {
     json = json,
     prev = prev,
-    types = List{}
+    types = {}
   }, Union)
 end
 
@@ -46,25 +46,65 @@ end
 Union.toC = function(self, c, name)
   c:beginUnion()
   do
-    -- TODO(sushi) this is kinda scuffed, but should work for now. Maybe 
-    --             later on make it so that we name each member manually 
-    --             in the schema def.
-    self.types:eachWithIndex(function(type, i)
-      type:toC(c, "v"..(i-1))
-    end)
+    for value_kind,type in pairs(self.types) do
+      type:toC(c, name.."_"..value_kind)
+    end
   end
-  c:endUnion(name)
+  c:endUnion()
 end
 
+---@param c CGen
 Union.writeDeserializer = function(self, c, name, obj, out)
-  
+  local vname = name.."Value"
+  c:beginIf("Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+  do
+    c:beginSwitch(vname.."->kind")
+    do
+      for value_kind,type in pairs(self.types) do
+        local handlers =
+        {
+          boolean = function()
+            c:beginCase("Value::Kind::Boolean")
+            do
+              type:toUnionCase(c, name.."_boolean", vname, out)
+            end
+            c:endCase()
+          end,
+          number = function()
+            c:beginCase("Value::Kind::Number")
+            do
+              type:toUnionCase(c, name.."_number", vname, out)
+            end
+            c:endCase()
+          end,
+          table = function()
+            c:beginCase("Value::Kind::Object")
+            do
+              c:beginScope()
+              type:toUnionCase(c, name.."_table", vname, out)
+              c:endScope()
+            end
+            c:endCase()
+          end,
+        }
+
+        local handler = handlers[value_kind]
+        if handler then
+          handler()
+        else
+          error("no handler for union value kind '"..value_kind.."'")
+        end
+      end
+    end
+    c:endSwitch()
+  end
+  c:endIf()
 end
 
 Union.__call = function(self, name)
   self.name = name
   if self.prev then
-    local member = { name=name,type=self }
-    self.prev.member.list:push(member)
+    self.prev.member.list:push{ name=name,type=self }
     self.prev.member.map[name] = self
   end
   return self
@@ -104,9 +144,15 @@ local TableType = setmetatable({},
     end
     T.toC = value.toC
     T.writeDeserializer = value.writeDeserializer
+    T.toUnionCase = value.toUnionCase
     T.__index = T
     Union.handlers[key] = function(union)
-      union.types:push(T)
+      if union.types[value.union_json_kind] then
+        error(
+          "the json kind "..value.union_json_kind.." has already been "..
+          "assigned to this union")
+      end
+      union.types[value.union_json_kind] = T
       return union
     end
     rawset(self, key, T)
@@ -115,6 +161,11 @@ local TableType = setmetatable({},
 
 TableType.Bool =
 {
+  union_json_kind = "boolean",
+  ---@param c CGen
+  toUnionCase = function(self, c, name, obj, out)
+    c:append(out.."->"..name.." = "..obj.."->boolean;")
+  end,
   ---@param c CGen
   toC = function(_, c, name)
     c:appendStructMember("b8", name, "false")
@@ -125,13 +176,9 @@ TableType.Bool =
     c:beginIf(
       "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
     do
-      c:beginIf(vname.."->kind == Value::Kind::True")
+      c:beginIf(vname.."->kind == Value::Kind::Boolean")
       do
-        c:append(out.."->"..name.." = true;")
-      end
-      c:beginElseIf(vname.."->kind == Value::Kind::False")
-      do
-        c:append(out.."->"..name.." = false;")
+        c:append(out.."->"..name.." = "..vname.."->boolean;")
       end
       c:beginElse()
       do
@@ -148,6 +195,7 @@ TableType.Bool =
 }
 TableType.Int =
 {
+  union_json_kind = "number",
   ---@param c CGen
   toC = function(_, c, name)
     c:appendStructMember("s32", name, "0")
@@ -174,6 +222,7 @@ TableType.Int =
 }
 TableType.UInt =
 {
+  union_json_kind = "number",
   ---@param c CGen
   toC = function(_, c, name)
     c:appendStructMember("u32", name, "0")
@@ -200,6 +249,7 @@ TableType.UInt =
 }
 TableType.String =
 {
+  union_json_kind = "string",
   ---@param c CGen
   toC = function(_, c, name)
     c:appendStructMember("str", name, "nil")
@@ -226,10 +276,53 @@ TableType.String =
 }
 TableType.StringArray =
 {
+  union_json_kind = "array",
   ---@param c CGen
   toC = function(_, c, name)
     c:appendStructMember("Array<str>", name, "nil")
-  end
+  end,
+  ---@param c CGen
+  writeDeserializer = function(_, c, name, obj, out)
+    local vname = name.."Value"
+    c:beginIf(
+      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+    do
+      local len = name.."_len"
+      local values = vname.."->array.values"
+
+      c:append("s32 "..len.." = "..values..".len();")
+
+      c:beginIf("!"..out.."->"..name..".init("..len..", allocator)")
+      do
+        c:append(
+          "ERROR(\"failed to initialize array for value '"..name.."'\");")
+        c:append("return false;")
+      end
+      c:endIf()
+
+      local idx = name.."_idx"
+      local elem = name.."_elem"
+      c:beginForLoop(
+        "s32 "..idx.." = 0",
+        idx.." < "..len,
+        "++"..idx)
+      do
+        c:append("Value* ", elem, " = ", values, "[", idx, "];")
+        c:beginIf(elem.."->kind != Value::Kind::String")
+        do
+          c:append(
+            "ERROR(\"unexpected type in string array, got \", ",
+            "getValueKindString(", elem, "->kind), \"\\n\");")
+          c:append("return false;")
+        end
+        c:endIf()
+        c:append(
+          out,"->",name,".push(",elem,"->string.allocateCopy(allocator));")
+      end
+      c:endForLoop()
+    end
+    c:endIf()
+  end,
 }
 
 Schema = {}
@@ -265,8 +358,8 @@ Schema.new = function(json)
           c:endIf()
 
           c:beginIf(
-            "!deserialize"..o.name.."(&"..vname.."->object,&"..out.."->"..
-            name..")")
+            "!deserialize"..o.name.."(allocator, &"..vname.."->object,&"..
+            out.."->"..name..")")
           do
             c:append("return false;")
           end
@@ -292,9 +385,9 @@ Schema.new = function(json)
 
   ---@param c CGen
   o.writeDeserializer = function(self, c)
-    c:beginFunction(
+    c:beginStaticFunction(
       "b8",
-      "deserialize"..self.name,
+      "deserialize"..self.name, "mem::Allocator* allocator",
       "json::Object* root", self.name.."* out")
     do
       c:append("using namespace json;")
@@ -302,9 +395,12 @@ Schema.new = function(json)
       self.tbl.member.list:each(function(member)
         if member.type.writeDeserializer then
           member.type:writeDeserializer(c, member.name, "root", "out")
+        else
+          print("missing deserializer for member "..member.name.."!")
         end
       end)
     end
+    c:append("return true;")
     c:endFunction()
   end
 
@@ -333,15 +429,7 @@ local enumCall = function(self, name_or_elem)
   return self
 end
 
-local EnumSet = {}
-EnumSet.__index = EnumSet
-
----@param c CGen
-EnumSet.toC = function(self, c, name)
-  c:appendStructMember(self.of.name.."Flags", name, "{}")
-end
-
-local enumNew = function(T, writeDeserializer)
+local enumNew = function(T, writeDeserializer, writeSetDeserializer)
   return function(tbl)
     return setmetatable(
     {
@@ -359,6 +447,16 @@ local enumNew = function(T, writeDeserializer)
       end,
       __index = function(self, key)
         if key == "Set" then
+          local EnumSet = {}
+          EnumSet.__index = EnumSet
+
+          ---@param c CGen
+          EnumSet.toC = function(self, c, name)
+            c:appendStructMember(self.of.name.."Flags", name, "{}")
+          end
+
+          EnumSet.writeDeserializer = writeSetDeserializer
+
           local s = setmetatable({of=T}, EnumSet)
           return function(name)
             tbl.member.list:push{name=name,type=s}
@@ -376,26 +474,15 @@ StringedEnum.new = function(json)
   local o = {}
   o.json = json
   o.elems = List{}
-  o.new = enumNew(o, function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findValue(\""..name.."\"_str)")
-    do
-      c:beginIf(vname.."->kind != Value::Kind::String")
-      do
-        c:append(
-          "ERROR(\"unexpected type for value '"..name.."' wanted string "..
-          "but got\", getValueKindString("..vname.."->kind), \"\\n\");")
-        c:append("return false;")
-      end
-      c:endIf()
 
-      c:append(
-        out.."->"..name.." = ".."get"..o.name.."FromString("..vname..
-        "->string);")
-    end
-    c:endIf()
-  end)
+  local getFromStringName = function(name)
+    return "get"..name.."FromString"
+  end
+
+  local getFromEnumName = function(name)
+    return "getStringFrom"..name
+  end
+
   ---@param c CGen
   o.toCDef = function(self, c)
     c:beginEnum(self.name)
@@ -409,7 +496,8 @@ StringedEnum.new = function(json)
     c:endEnum()
     c:typedef("Flags<"..self.name..">", self.name.."Flags")
 
-    c:beginFunction(o.name, "get"..o.name.."FromString", "str x")
+    local from_string_name = getFromStringName(o.name)
+    c:beginStaticFunction(o.name, from_string_name, "str x")
     do
       c:beginSwitch("x.hash()")
       do
@@ -422,10 +510,14 @@ StringedEnum.new = function(json)
         end)
       end
       c:endSwitch()
+      c:append(
+        'assert(!"invalid string passed to ', from_string_name, '");')
+      c:append("return {};")
     end
     c:endFunction()
 
-    c:beginFunction("str", "getStringFrom"..o.name, o.name.." x")
+    local from_enum_name = getFromEnumName(o.name)
+    c:beginStaticFunction("str", from_enum_name, o.name.." x")
     do
       c:beginSwitch("x")
       do
@@ -438,9 +530,79 @@ StringedEnum.new = function(json)
         end)
       end
       c:endSwitch()
+      c:append(
+        'assert(!"invalid value passed to ', from_enum_name, '");')
+      c:append("return {};")
     end
     c:endFunction()
   end
+
+  o.new = enumNew(o,
+    ---@param c CGen
+    -- deserializer
+    function(_, c, name, obj, out)
+      local vname = name.."Value"
+      c:beginIf(
+        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+      do
+        c:beginIf(vname.."->kind != Value::Kind::String")
+        do
+          c:append(
+            "ERROR(\"unexpected type for value '"..name.."' wanted string "..
+            "but got\", getValueKindString("..vname.."->kind), \"\\n\");")
+          c:append("return false;")
+        end
+        c:endIf()
+
+        c:append(
+          out.."->"..name.." = "..getFromStringName(o.name).."("..vname..
+          "->string);")
+      end
+      c:endIf()
+    end,
+    ---@param c CGen
+    -- set deserializer
+    function(self, c, name, obj, out)
+      local vname = name.."Value"
+      c:beginIf(
+        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+      do
+        c:beginIf(vname.."->kind != Value::Kind::Array")
+        do
+          c:append(
+            "ERROR(\"unexpected type for value '"..name.."' wanted array "..
+            "but got \", getValueKindString("..vname.."->kind), \"\\n\");")
+          c:append("return false;")
+        end
+        c:endIf()
+
+        local values = vname.."->array.values"
+        local idx = name.."_idx"
+        local elem = name.."_elem"
+        local from_string_name = getFromStringName(o.name)
+        c:beginForLoop(
+          "s32 "..idx.." = 0",
+          idx.." < "..values..".len()",
+          "++"..idx)
+        do
+          c:append("Value* "..elem.." = "..values.."["..idx.."];")
+          c:beginIf(elem.."->kind != Value::Kind::String")
+          do
+            c:append(
+              "ERROR(\"unexpected type in string enum set, wanted string "..
+              "got \", getValueKindString("..elem.."->kind), \"\\n\");")
+            c:append("return false;")
+          end
+          c:endIf()
+          c:append(
+            out.."->"..name..".set("..from_string_name.."("..elem..
+            "->string));")
+        end
+        c:endForLoop()
+      end
+      c:endIf()
+    end)
+
   return setmetatable(o, StringedEnum)
 end
 StringedEnum.__call = enumCall
@@ -450,7 +612,66 @@ NumericEnum.new = function(json)
   local o = {}
   o.json = json
   o.elems = List{}
-  o.new = enumNew(o)
+  o.new = enumNew(o,
+    ---@param c CGen
+    -- deserializer
+    function(_, c, name, obj, out)
+      local vname = name.."Value"
+      c:beginIf(
+        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+      do
+        c:beginIf(vname.."->kind != Value::Kind::Number")
+        do
+          c:append(
+            "ERROR(\"unexpected type for value '"..name.."' wanted number "..
+            "but got\", getValueKindString("..vname.."->kind), \"\\n\");")
+          c:append("return false;")
+        end
+        c:endIf()
+
+        c:append(out.."->"..name.." = ("..o.name..")("..vname.."->number);")
+      end
+      c:endIf()
+    end,
+    ---@param c CGen
+    -- set deserializer
+    function(_, c, name, obj, out)
+      local vname = name.."Value"
+      c:beginIf(
+        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
+      do
+        c:beginIf(vname.."->kind != Value::Kind::Array")
+        do
+          c:append(
+            "ERROR(\"unexpected type for value '"..name.."' wanted array "..
+            "but got \", getValueKindString("..vname.."->kind), \"\\n\");")
+          c:append("return false;")
+        end
+        c:endIf()
+
+        local values = vname.."->array.values"
+        local idx = name.."_idx"
+        local elem = name.."_elem"
+        c:beginForLoop(
+          "s32 "..idx.." = 0",
+          idx.." < "..values..".len()",
+          "++"..idx)
+        do
+          c:append("Value* "..elem.." = "..values.."["..idx.."];")
+          c:beginIf(elem.."->kind != Value::Kind::String")
+          do
+            c:append(
+              "ERROR(\"unexpected type in numeric enum set, wanted number "..
+              "got \", getValueKindString("..elem.."->kind), \"\\n\");")
+            c:append("return false;")
+          end
+          c:endIf()
+          c:append(out,"->",name,".set((",o.name,")(",elem,"->number));")
+        end
+        c:endForLoop()
+      end
+      c:endIf()
+    end)
   ---@param c CGen
   o.toCDef = function(self, c)
     c:beginEnum(self.name)
@@ -510,7 +731,7 @@ end
 
 Union.handlers["Table"] = function(union)
   local t = Table.new(union, union.json)
-  union.types:push(t)
+  union.types["table"] = t
   return t
 end
 
@@ -523,6 +744,24 @@ Table.toC = function(self, c, name)
     end)
   end
   if name then c:endStruct(name) end
+end
+
+---@param c CGen
+local writeTableDeserializer = function(self, c, name, vname, out)
+
+  local nuobj = name.."Obj"
+
+  c:append("Object* "..nuobj.." = &"..vname.."->object;")
+  local nuout = "(&"..out.."->"..name..")"
+
+  self.member.list:each(function(member)
+    if member.type.writeDeserializer then
+      member.type:writeDeserializer(c, member.name, nuobj, nuout)
+    else
+      print("missing deserializer for member '"..member.name.."' of table "..
+            "'"..name.."'!")
+    end
+  end)
 end
 
 ---@param c CGen
@@ -539,19 +778,14 @@ Table.writeDeserializer = function(self, c, name, obj, out)
       c:append("return false;")
     end
     c:endIf()
-
-    local nuobj = name.."Obj"
-
-    c:append("Object* "..nuobj.." = &"..vname.."->object;")
-    local nuout = "(&"..out.."->"..name..")"
-
-    self.member.list:each(function(member)
-      if member.type.writeDeserializer then
-        member.type:writeDeserializer(c, member.name, nuobj, nuout)
-      end
-    end)
+    writeTableDeserializer(self, c, name, vname, out)
   end
   c:endIf()
+end
+
+---@param c CGen
+Table.toUnionCase = function(self, c, name, obj, out)
+  writeTableDeserializer(self, c, name, obj, out)
 end
 
 Table.__index = function(self, key)
@@ -997,7 +1231,7 @@ namespace lsp
 using namespace iro;
 
 static Logger logger = 
-  Logger::create("lpp.lsp"_str, Logger::Verbosity::Notice);
+  Logger::create("lpp.lsp"_str, Logger::Verbosity::Trace);
 
 ]]
 
