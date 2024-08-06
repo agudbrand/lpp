@@ -8,18 +8,17 @@
 #include "unistd.h"
 #include "sys/types.h"
 
-static auto logger = 
-  Logger::create("lsp.server"_str, Logger::Verbosity::Trace);
-
 namespace lsp
 {
 
-using VKind = json::Value::Kind;
+// static auto logger = 
+//   Logger::create("lsp.server"_str, Logger::Verbosity::Trace);
 
 /* ----------------------------------------------------------------------------
  */
 b8 Server::init(Lpp* lpp)
 {
+  DEBUG("init\n");
   assert(lpp);
   this->lpp = lpp;
   return true;
@@ -69,8 +68,7 @@ b8 Server::loop()
 
   return parseTestFile(this);
 
-  // TRACE("pid is: ", getpid(), "\n");
-  // raise(SIGSTOP);
+  DEBUG("entering server loop\n");
 
   for (;;)
   {

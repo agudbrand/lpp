@@ -10,6 +10,10 @@
 
 #include "metaprogram.h"
 
+#include "signal.h"
+#include "unistd.h"
+#include "sys/types.h"
+
 extern "C"
 {
 #include "lua.h"
@@ -82,6 +86,11 @@ void Lpp::deinit()
  */
 static b8 runLsp(Lpp* lpp)
 {
+  DEBUG("running lsp\n");
+
+  DEBUG("pid is: ", getpid(), "\n");
+  raise(SIGSTOP);
+
   lsp::Server server;
 
   if (!server.init(lpp))

@@ -9,7 +9,7 @@
 #include "iro/common.h"
 #include "iro/unicode.h"
 #include "iro/json/types.h"
-#include "lsp/types.h"
+#include "generated/lsp.h"
 
 #include "lpp.h"
 
