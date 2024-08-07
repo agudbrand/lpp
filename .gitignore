@@ -10,3 +10,7 @@ build/debug
 src/generated/
 
 build/
+
+test.json
+
+lpplsp.log
