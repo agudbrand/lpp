@@ -74,7 +74,11 @@ lua_script_driver.input = "src/scripts/lsp.lua"
 local lua_script_output = "src/generated/lsp.h"
 
 lake.target(lua_script_output)
-  :dependsOn(lua_script_driver.input)
+  :dependsOn
+  {
+    lua_script_driver.input,
+    enosi.getProject("elua"):getExecutables()
+  }
   :recipe(recipes.luaScript(lua_script_driver, proj, lua_script_output))
 
 local link_driver = Driver.Linker.new()
