@@ -33,6 +33,101 @@ void Server::deinit()
 
 /* ----------------------------------------------------------------------------
  */
+template<typename... Args>
+static b8 processError(Args... args)
+{
+  ERROR(args...);
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static str tryGetStringMember(json::Object* o, str name)
+{
+  json::Value* v = o->findMember(name);
+  if (!v)
+    return nil;
+  if (v->kind != json::Value::Kind::String)
+    return nil;
+  return v->string;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static json::Object* tryGetObjectMember(json::Object* o, str name)
+{
+  json::Value* v = o->findMember(name);
+  if (!v)
+    return nullptr;
+  if (v->kind != json::Value::Kind::Object)
+    return nullptr;
+  return &v->object;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Processes the given request and produces a response in the given json.
+ */
+static b8 processRequest(
+    Server* server, 
+    json::Object* request, 
+    json::Object* response,
+    json::JSON* json) // the JSON object containing the response
+{
+  using namespace json;
+
+  Value* id = request->findMember("id"_str);
+  if (!id)
+    return processError("lsp request missing id\n");
+
+  Value* response_id = json->newValue(id->kind);
+  if (!response_id)
+    return processError("failed to create response id value\n");
+  response->addMember("id"_str, response_id);
+
+  switch (id->kind)
+  {
+  case Value::Kind::String:
+    response_id->string = id->string.allocateCopy(&json->string_buffer);
+    break;
+  case Value::Kind::Number:
+    response_id->number = id->number;
+    break;
+  default:
+    return processError(
+        "invalid value kind ", getValueKindString(id->kind), 
+        " encountered in lsp request\n");
+  }
+  
+  str method = tryGetStringMember(request, "method"_str);
+  if (isnil(method))
+    return processError("lsp request missing method\n");
+
+  switch (method.hash())
+  {
+  case "initialize"_hashed:
+    {
+      Object* params = tryGetObjectMember(request, "params"_str);
+      if (!params)
+        return processError("lsp request missing params\n");
+
+      if (!server->init_params_allocator.init())
+        return processError(
+            "failed to initialize InitializeParams allocator\n");
+
+      if (!deserializeInitializeParams(
+            &server->init_params_allocator,
+            params,
+            &server->init_params))
+        return processError("failed to deserialize InitializeParams\n");
+    }
+    break;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 parseTestFile(Server* server)
 {
   auto f = fs::File::from("test.json"_str, fs::OpenFlag::Read);
@@ -41,6 +136,9 @@ b8 parseTestFile(Server* server)
   defer { f.close(); };
 
   json::JSON json;
+  if (!json.init())
+    return processError("failed to init json object for test file\n");
+
   json::Parser parser;
 
   jmp_buf failjmp;
@@ -56,30 +154,19 @@ b8 parseTestFile(Server* server)
 
   json.prettyPrint(&fs::stdout);
 
-  mem::LenientBump bump;
-  if (!bump.init())
-  {
-    ERROR("failed to initialize bump allocator for deserialization\n");
-    return false;
-  }
+  json::JSON response_json;
+  if (!response_json.init())
+    return processError("failed to initialize response json object\n");
 
-  json::Value* params_value = json.root->object.findMember("params"_str);
-  if (!params_value)
-  {
-    ERROR("jsonrpc did not have 'params' member\n");
-    return false;
-  }
+  response_json.root = response_json.newValue(json::Value::Kind::Object);
+  response_json.root->init();
 
-  InitializeParams init_params;
-
-  if (!deserializeInitializeParams(
-        &bump, 
-        &params_value->object, 
-        &init_params))
-  {
-    ERROR("failed to deserialize InitializeParams\n");
+  if (!processRequest(
+        server,
+        &json.root->object,
+        &response_json.root->object,
+        &response_json))
     return false;
-  }
 
   return true;
 }
