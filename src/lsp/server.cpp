@@ -65,6 +65,98 @@ static json::Object* tryGetObjectMember(json::Object* o, str name)
 }
 
 /* ----------------------------------------------------------------------------
+ *  Fills out a ServerCapabilities struct with what the lsp server 
+ *  currently supports.
+ */
+static void writeServerCapabilities(ServerCapabilities* out)
+{
+  // Just use utf16 for now since its required to be supported.
+  out->positionEncoding = PositionEncodingKind::UTF16;
+
+  // Not sure yet.
+  out->textDocumentSync = TextDocumentSyncKind::Full;
+
+  // Don't know what exactly this is yet.
+  out->completionProvider.completionItem.labelDetailsSupport = false;
+
+  // No extra trigger or commit characters for now.
+  out->completionProvider.triggerCharacters = nil;
+  out->completionProvider.allCommitCharacters = nil;
+
+  // Not sure what this is yet.
+  out->completionProvider.resolveProvider = false;
+
+  // Not yet supported stuff.
+  out->hoverProvider = false;
+  out->signatureHelpProvider.triggerCharacters = nil;
+  out->signatureHelpProvider.retriggerCharacters = nil;
+  out->declarationProvider = false;
+  out->definitionProvider = false;
+  out->typeDefinitionProvider = false;
+  out->referencesProvider = false;
+  out->documentHighlightProvider = false;
+  out->documentSymbolProvider = false;
+  out->codeActionProvider = false;
+  out->codeLensProvider.resolveProvider = false;
+  out->documentLinkProvider.resolveProvider = false;
+  out->colorProvider = false;
+  out->documentFormattingProvider = false;
+  out->documentRangeFormattingProvider = false;
+  out->documentOnTypeFormattingProvider.firstTriggerCharacter = nil;
+  out->documentOnTypeFormattingProvider.moreTriggerCharacter = nil;
+  out->renameProvider = false;
+  out->foldingRangeProvider = false;
+  out->executeCommandProvider.commands = nil;
+  out->selectionRangeProvider = false;
+  out->linkedEditingRangeProvider = false;
+  out->callHierarchyProvider = false;
+  out->monikerProvider = false;
+  out->typeHierarchyProvider = false;
+  out->inlineValueProvider = false;
+  out->inlayHintProvider = false;
+  out->workspaceSymbolProvider = false;
+
+  // Workspace folders stuff.
+  {
+    out->workspace.workspaceFolders.supported = false;
+    out->workspace.workspaceFolders.changeNotifications_kind = 
+      json::Value::Kind::Boolean;
+    out->workspace.workspaceFolders.changeNotifications_boolean = false;
+  }
+
+  // File operations
+  {
+    // Just a buncha empty arrays for now. Might cause problems.
+    out->workspace.fileOperations.didCreate.filters.init();
+    out->workspace.fileOperations.willCreate.filters.init();
+    out->workspace.fileOperations.didRename.filters.init();
+    out->workspace.fileOperations.willRename.filters.init();
+    out->workspace.fileOperations.didDelete.filters.init();
+    out->workspace.fileOperations.willDelete.filters.init();
+  }
+
+  // Diagnostics stuff.
+  {
+    out->diagnosticProvider.identifier = nil;
+    out->diagnosticProvider.interFileDependencies = false;
+    out->diagnosticProvider.workspaceDiagnostics = false;
+  }
+
+  // Semantic tokens stuff.
+  {
+    // Empty arrays for now.
+    out->semanticTokensProvider.legend.tokenTypes.init();
+    out->semanticTokensProvider.legend.tokenModifiers.init();
+    out->semanticTokensProvider.range_kind = json::Value::Kind::Boolean;
+    out->semanticTokensProvider.range_boolean = false;
+    out->semanticTokensProvider.full_kind = json::Value::Kind::Boolean;
+    out->semanticTokensProvider.full_boolean = false;
+  }
+  
+
+}
+
+/* ----------------------------------------------------------------------------
  *  Processes the given request and produces a response in the given json.
  */
 static b8 processRequest(
@@ -119,6 +211,32 @@ static b8 processRequest(
             params,
             &server->init_params))
         return processError("failed to deserialize InitializeParams\n");
+
+      ServerCapabilities server_capabilities = {};
+      writeServerCapabilities(&server_capabilities);
+
+      Value* response_result = json->newValue(Value::Kind::Object);
+      if (!response_result)
+        return processError("failed to create response result object\n");
+      if (!response_result->init())
+        return processError("failed to initialize response result object\n");
+      response->addMember("result"_str, response_result);
+
+      mem::LenientBump server_capabilities_allocator;
+      if (!server_capabilities_allocator.init())
+        return processError(
+            "failed to initialize allocator for ServerCapabilities "
+            "serialization\n");
+      defer { server_capabilities_allocator.deinit(); };
+
+      if (!serializeServerCapabilities(
+            json,
+            &response_result->object,
+            server_capabilities,
+            &server_capabilities_allocator))
+        return processError("failed to serialize ServerCapabilities\n");
+
+      json->prettyPrint(&fs::stdout);
     }
     break;
   }
