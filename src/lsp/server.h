@@ -27,8 +27,8 @@ struct Server
   str root_path;
   str root_uri;
 
-  InitializeParams init_params;
-  mem::LenientBump init_params_allocator;
+  // InitializeParams init_params;
+  // mem::LenientBump init_params_allocator;
 
   b8   init(Lpp* lpp);
   void deinit();

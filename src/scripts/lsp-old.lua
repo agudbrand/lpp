@@ -738,7 +738,7 @@ local enumNew = function(T, options)
     return setmetatable(
     {
       ---@param c CGen
-      toC = function(self, c, name)
+      toC = function(_, c, name)
         c:appendStructMember(T.name, name, "{}")
       end,
       writeDeserializer = options.writeDeserializer,
@@ -750,7 +750,7 @@ local enumNew = function(T, options)
         tbl.member.map[name] = self
         return tbl
       end,
-      __index = function(self, key)
+      __index = function(_, key)
         if key == "Set" then
           local EnumSet = {}
           EnumSet.__index = EnumSet

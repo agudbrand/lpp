@@ -64,6 +64,7 @@ static json::Object* tryGetObjectMember(json::Object* o, str name)
   return &v->object;
 }
 
+#if 0
 /* ----------------------------------------------------------------------------
  *  Fills out a ServerCapabilities struct with what the lsp server 
  *  currently supports.
@@ -243,6 +244,8 @@ static b8 processRequest(
 
   return true;
 }
+#endif
+
 
 /* ----------------------------------------------------------------------------
  */
@@ -279,12 +282,14 @@ b8 parseTestFile(Server* server)
   response_json.root = response_json.newValue(json::Value::Kind::Object);
   response_json.root->init();
 
+#if 0
   if (!processRequest(
         server,
         &json.root->object,
         &response_json.root->object,
         &response_json))
     return false;
+#endif
 
   return true;
 }
