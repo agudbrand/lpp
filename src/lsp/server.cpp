@@ -8,6 +8,9 @@
 #include "unistd.h"
 #include "sys/types.h"
 
+#include "ctype.h"
+#include "cstdlib"
+
 namespace lsp
 {
 
@@ -64,7 +67,6 @@ static json::Object* tryGetObjectMember(json::Object* o, str name)
   return &v->object;
 }
 
-#if 0
 /* ----------------------------------------------------------------------------
  *  Fills out a ServerCapabilities struct with what the lsp server 
  *  currently supports.
@@ -120,9 +122,7 @@ static void writeServerCapabilities(ServerCapabilities* out)
   // Workspace folders stuff.
   {
     out->workspace.workspaceFolders.supported = false;
-    out->workspace.workspaceFolders.changeNotifications_kind = 
-      json::Value::Kind::Boolean;
-    out->workspace.workspaceFolders.changeNotifications_boolean = false;
+    out->workspace.workspaceFolders.changeNotifications.setAsBoolean(false); 
   }
 
   // File operations
@@ -148,13 +148,9 @@ static void writeServerCapabilities(ServerCapabilities* out)
     // Empty arrays for now.
     out->semanticTokensProvider.legend.tokenTypes.init();
     out->semanticTokensProvider.legend.tokenModifiers.init();
-    out->semanticTokensProvider.range_kind = json::Value::Kind::Boolean;
-    out->semanticTokensProvider.range_boolean = false;
-    out->semanticTokensProvider.full_kind = json::Value::Kind::Boolean;
-    out->semanticTokensProvider.full_boolean = false;
+    out->semanticTokensProvider.range.setAsBoolean(false);
+    out->semanticTokensProvider.full.setAsBoolean(false);
   }
-  
-
 }
 
 /* ----------------------------------------------------------------------------
@@ -197,6 +193,8 @@ static b8 processRequest(
 
   switch (method.hash())
   {
+  default:
+    return processError("unhandled method in processRequest: ", method, "\n");
   case "initialize"_hashed:
     {
       Object* params = tryGetObjectMember(request, "params"_str);
@@ -207,14 +205,15 @@ static b8 processRequest(
         return processError(
             "failed to initialize InitializeParams allocator\n");
 
-      if (!deserializeInitializeParams(
-            &server->init_params_allocator,
-            params,
-            &server->init_params))
+      if (!server->init_params.deserialize(
+            params, 
+            &server->init_params_allocator))
         return processError("failed to deserialize InitializeParams\n");
 
-      ServerCapabilities server_capabilities = {};
-      writeServerCapabilities(&server_capabilities);
+      InitializeResult init_result;
+      init_result.serverInfo.name = "lpplsp"_str;
+      init_result.serverInfo.version = "0.0.1"_str;
+      writeServerCapabilities(&init_result.capabilities);
 
       Value* response_result = json->newValue(Value::Kind::Object);
       if (!response_result)
@@ -223,19 +222,20 @@ static b8 processRequest(
         return processError("failed to initialize response result object\n");
       response->addMember("result"_str, response_result);
 
-      mem::LenientBump server_capabilities_allocator;
-      if (!server_capabilities_allocator.init())
+      mem::LenientBump init_result_allocator;
+      if (!init_result_allocator.init())
         return processError(
-            "failed to initialize allocator for ServerCapabilities "
+            "failed to initialize allocator for InitializeResult "
             "serialization\n");
-      defer { server_capabilities_allocator.deinit(); };
+      defer { init_result_allocator.deinit(); };
 
-      if (!serializeServerCapabilities(
-            json,
-            &response_result->object,
-            server_capabilities,
-            &server_capabilities_allocator))
-        return processError("failed to serialize ServerCapabilities\n");
+      Object* result_obj = &response_result->object;
+
+      if (!init_result.serialize(
+            json, 
+            &response_result->object, 
+            &init_result_allocator))
+        return processError("failed to serialize InitializeResult\n");
 
       json->prettyPrint(&fs::stdout);
     }
@@ -244,8 +244,50 @@ static b8 processRequest(
 
   return true;
 }
-#endif
 
+/* ----------------------------------------------------------------------------
+ */
+static b8 processNotification(Server* server, json::Object* notification)
+{
+  using namespace json;
+
+  str method = tryGetStringMember(notification, "method"_str);
+  if (isnil(method))
+    return processError("lsp request missing method\n");
+
+  switch (method.hash())
+  {
+  default:
+    return processError(
+        "unhandled method in processNotification: ", method, "\n");
+  case "initialized"_hashed:
+    break;
+  case "textDocument/didOpen"_hashed:
+    {
+      Object* params = tryGetObjectMember(notification, "params"_str);
+      if (!params)
+        return processError("lsp request missing params\n");
+
+      mem::LenientBump allocator;
+      if (!allocator.init())
+        return processError("failed to initialize allocator\n");
+      defer { allocator.deinit(); };
+
+      DidOpenTextDocumentParams did_open_params;
+      if (!did_open_params.deserialize(params, &allocator))
+        return processError(
+            "failed to deserialize textDocument/didOpen params\n");
+      
+      str uri = did_open_params.textDocument.uri;
+      str file = uri.sub("file:///"_str.len-1);
+
+      INFO("opened file ", file, "\n");
+    }
+    break;
+  }
+
+  return true;
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -282,14 +324,12 @@ b8 parseTestFile(Server* server)
   response_json.root = response_json.newValue(json::Value::Kind::Object);
   response_json.root->init();
 
-#if 0
   if (!processRequest(
         server,
         &json.root->object,
         &response_json.root->object,
         &response_json))
     return false;
-#endif
 
   return true;
 }
@@ -301,7 +341,7 @@ b8 Server::loop()
   io::Memory buffer;
   buffer.open();
 
-  return parseTestFile(this);
+  // return parseTestFile(this);
 
   // DEBUG("pid is: ", getpid(), "\n");
   // raise(SIGSTOP);
@@ -312,36 +352,116 @@ b8 Server::loop()
   {
     buffer.clear();
 
-    // Read till we reach the end of a message.
+    const s32 header_buffer_size = 255;
+
+    u8 header_buffer[header_buffer_size] = {};
+    u8* cursor = header_buffer;
+
+    Bytes reserved_space = {};
+
     for (;;)
     {
-      auto reserved = buffer.reserve(128);
-      auto bytes_read = fs::stdin.read(reserved);
-      if (bytes_read == -1)
+      if (cursor > header_buffer + header_buffer_size)
+      {
+        ERROR("content header is too long\n");
         return false;
-      buffer.commit(bytes_read);
-      if (reserved.end()[-1] == 0)
+      }
+
+      fs::stdin.read({cursor, 1});
+      if (*cursor == ':')
+      {
+        str fieldname = str::from(header_buffer,cursor);
+        if (fieldname == "Content-Length"_str)
+        {
+          cursor = header_buffer;
+          fs::stdin.read({cursor, 1});
+          while (isspace(*cursor))
+            fs::stdin.read({cursor, 1});
+          while (*cursor != '\r')
+          {
+            cursor += 1;
+            fs::stdin.read({cursor, 1});
+          }
+          s32 content_length = strtoul((char*)header_buffer, nullptr, 0);
+          reserved_space = buffer.reserve(content_length);
+          buffer.commit(content_length);
+          *header_buffer = '\r';
+          cursor = header_buffer + 1;
+        }
+      }
+      else if (header_buffer[0] == '\r' && header_buffer[1] == '\n' &&
+               header_buffer[2] == '\r' && header_buffer[3] == '\n')
         break;
+      else
+        cursor += 1;
     }
 
-    TRACE(buffer.asStr(), "\n");
-    
-    json::JSON json;
-    json::Parser parser;
+    fs::stdin.read(reserved_space);
 
+    {
+      auto f = fs::File::from("lastmessage.json"_str, 
+            fs::OpenFlag::Create
+          | fs::OpenFlag::Write
+          | fs::OpenFlag::Truncate);
+
+      f.write(reserved_space);
+      f.close();
+    }
+
+    // TRACE(buffer.asStr(), "\n");
+
+    json::JSON json;
+    if (!json.init())
+      return processError(
+          "failed to initialize json object for parsing incoming data\n");
+    defer { json.deinit(); };
+
+    json::Parser parser;
     // TODO(sushi) just pass stdin into this
-    // TODO(sushi) dont init the JSON in the parser, do it externally
     if (!parser.init(&buffer, &json, "lspinput"_str))
-      return false;
-    defer { parser.deinit(); json.deinit(); };
+      return processError(
+          "failed to initialize json parser for incoming data\n");
+    defer { parser.deinit(); };
 
     if (!parser.start())
-      return false;
+      return processError("failed to parse JSON message\n");
 
     buffer.clear();
     json.prettyPrint(&buffer);
 
-    fs::stderr.write(buffer.asStr());
+    // TRACE(buffer.asStr());
+
+    if (json.root->object.findMember("id"_str))
+    {
+      // This is a request.
+      json::JSON response_json;
+      if (!response_json.init())
+        return processError("failed to initialize response json object\n");
+
+      response_json.root = response_json.newValue(json::Value::Kind::Object);
+      response_json.root->init();
+
+      if (!processRequest(
+            this,
+            &json.root->object,
+            &response_json.root->object,
+            &response_json))
+        return false;
+
+      buffer.clear();
+      response_json.prettyPrint(&buffer);
+      // TRACE(buffer.asStr());
+      io::formatv(&fs::stdout, "Content-Length: ", buffer.len, "\r\n\r\n");
+      fs::stdout.write(buffer.asStr());
+    }
+    else
+    {
+      // This is a notification.
+      if (!processNotification(
+            this,
+            &json.root->object))
+        return false;
+    }
   }
 
   return true;
