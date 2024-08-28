@@ -34,12 +34,12 @@ local inst = {}
 --   local s = i.short_src
 --   local f = i.name
 --   local id = s..":"..line
---   print(id, f)
 --   if not inst[id] then 
 --     inst[id] = 1 
 --   else
 --     inst[id] = inst[id] + 1
 --   end
+--   print(id, inst[id])
 -- end, "l")
 
 -- * --------------------------------------------------------------------------
@@ -65,7 +65,8 @@ local Schema,
       StringedEnum,
       NumericEnum,
       Variant,
-      SchemaArray
+      SchemaArray,
+      StringMap
 
 setmetatable(json,
 {
@@ -201,9 +202,8 @@ Variant.new = function(prev, json)
 end
 
 ---@param c CGen
-Variant.writeStructMember = function(self, c, name)
+Variant.writeStructSubtype = function(self, c, name)
   local typename = "variant_"..name
-
   c:beginStruct(typename)
   do
     c:beginEnum("Kind")
@@ -473,11 +473,18 @@ Variant.writeStructMember = function(self, c, name)
       end
       c:endFunction()
     end
+    
+    c:append(typename,"() { }")
+
   end
   c:endStruct()
 
   c:append("using ",name,"Kind = ",typename,"::Kind;")
+end
 
+---@param c CGen
+Variant.writeStructMember = function(self, c, name)
+  local typename = "variant_"..name
   c:appendStructMember(typename, name, "{}")
 end
 
@@ -582,6 +589,16 @@ end
 Schema.writeStruct = function(self, c)
   c:beginStruct(self.name)
 
+  self.obj.bases:each(function(base)
+    base.obj.member.list:each(function(member)
+      if member.type.writeStructSubtype then
+        member.type:writeStructSubtype(c, member.name)
+      end
+
+      member.type:writeStructMember(c, member.name)
+    end)
+  end)
+
   self.obj.member.list:each(function(member)
     if member.type.writeStructSubtype then
       member.type:writeStructSubtype(c, member.name)
@@ -620,6 +637,8 @@ Schema.writeStruct = function(self, c)
     c:append("return true;")
   end
   c:endFunction()
+
+  -- c:append(self.name,"() { }")
 
   c:endStruct()
 end
@@ -868,7 +887,7 @@ SchemaArray.new = function(json, tbl)
 
     ---@param c CGen
     o.writeStructMember = function(_, c, name)
-      c:appendStructMember("Array<"..schema_name..">", name)
+      c:appendStructMember("Array<"..schema_name..">", name, "nil")
     end
 
     ---@param c CGen
@@ -1161,7 +1180,9 @@ end
 
 NumericEnum = {}
 NumericEnum.__call = enumCall
-NumericEnum.new = function(json)
+NumericEnum.new = function(json, init_value)
+  init_value = init_value or 0
+
   local o = {}
   o.json = json
   o.elems = List{}
@@ -1211,8 +1232,8 @@ NumericEnum.new = function(json)
       newValue(c, name, "Array", "obj", function(vname)
         c:append("json::Array* arr = &",vname,"->array;")
         c:beginForLoop(
-          o.name.." kind = ("..o.name..")0",
-          "(u32)kind < (u32)"..o.name.."::COUNT",
+          o.name.." kind = ("..o.name..")1",
+          "(u32)kind <= (u32)"..o.name.."::COUNT",
           "kind = ("..o.name..")((u32)kind + 1)")
         do
           c:beginIf("this->"..name..".test(kind)")
@@ -1232,8 +1253,8 @@ NumericEnum.new = function(json)
   o.writeEnum = function(self, c)
     c:beginEnum(self.name)
     do
-      self.elems:each(function(elem)
-        c:appendEnumElement(elem)
+      self.elems:eachWithIndex(function(elem, i)
+        c:appendEnumElement(elem, i)
       end)
       c:appendEnumElement "COUNT"
     end
@@ -1242,6 +1263,106 @@ NumericEnum.new = function(json)
   end
 
   return setmetatable(o, NumericEnum)
+end
+
+-- * --------------------------------------------------------------------------
+-- @string_map
+
+local stringMapVariant = function(o, json)
+  local v = Variant.new(nil, json)
+
+  ---@param c CGen
+  o.writeStructMember = function(_, c, name)
+    v:writeStructSubtype(c, name)
+    c:appendStructMember(
+    "StringMap<variant_"..name..">", name, "{}")
+  end
+
+  ---@param c CGen
+  o.writeDeserializer = function(_, c, name)
+    c:beginIf("!"..name..".init(allocator)")
+    do
+      c:append(
+        'ERROR("failed to initialize string map for \'',name,'\'\\n");')
+      c:append("return false;")
+    end
+    c:endIf()
+
+    c:beginForEachLoop("Object::Member& member", "obj->members")
+    do
+      c:append("auto elem_ptr = this->",name,".add(member.name);")
+      c:beginIf("!elem_ptr")
+      do
+        c:append(
+          'ERROR("failed to add element to string map for member \'",'..
+          'member.name, "\'\\n");')
+        c:append("return false;")
+      end
+      c:endIf()
+
+      c:append("auto& elem = *elem_ptr;")
+
+      v:writeDeserializer(c, "elem")
+    end
+    c:endForLoop()
+  end
+
+  ---@param c CGen
+  o.writeSerializer = function(_, c, name)
+    c:beginForEachLoop("auto& elem", name..".map")
+    do
+      c:append("Value* elemValue = json->newValue(Value::Kind::Object);")
+      c:beginIf("!elemValue")
+      do
+        c:append(
+          'ERROR("failed to create value for element \'",elem.key,"\'\\n");')
+        c:append("return false;")
+      end
+      c:endIf()
+
+      c:append("obj->addMember(elem.key, elemValue);")
+
+      v:writeSerializer(c, "elem.value")
+    end
+    c:endForLoop()
+  end
+  return v
+end
+
+StringMap = {}
+StringMap.new = function(prev, json)
+  return function(name)
+    local o = 
+    {
+      json = json,
+      name = name,
+    }
+
+    prev:addMember(o, name)
+
+    return setmetatable(o,
+    {
+      __index = function(self, key)
+        local handlers = 
+        {
+          Variant = function()
+            return stringMapVariant(o, json)
+          end
+        }
+
+        local handler = handlers[key]
+        if handler then
+          return handler()
+        end
+      end
+    })
+  end
+end
+StringMap.__index = StringMap
+
+---@param c CGen
+StringMap.writeSerializer = function(self, c, name)
+
 end
 
 -- * --------------------------------------------------------------------------
@@ -1261,6 +1382,8 @@ end
 ---@field json json
 --- If this Object instance has been added to 'prev' already.
 ---@field added boolean
+--- List of 'base' objects that are inherited into this one.
+---@field bases List
 Object = {}
 Object.__index = function(self, key)
   local json = self.json
@@ -1275,21 +1398,26 @@ Object.__index = function(self, key)
     SchemaArray = function()
       return SchemaArray.new(self.json, self)
     end,
+    StringMap = function()
+      return StringMap.new(self, self.json)
+    end,
     extends = function()
-      return setmetatable(
+      local o = 
       {
-        bases = List{},
         done = function()
           return self
         end,
-      },
+      }
+      return setmetatable(o,
       {
-        __index = function(self, key)
+        __index = function(_, key)
+          print("adding base "..key)
           local schema = json.schemas.map[key]
           if not schema then
             error("'extends' expects a schema name")
           end
           self.bases:push(schema)
+          return o
         end
       })
     end
@@ -1332,7 +1460,8 @@ Object.new = function(prev, json)
     {
       list = List{},
       map = {}
-    }
+    },
+    bases = List{}
   }
   return setmetatable(o, Object)
 end
@@ -1457,21 +1586,6 @@ json.Schema "Position"
 json.Schema "Range"
   .Position "start"
   .Position "end"
-
-json.Schema "Test"
-  .Variant "v"
-    .Position
-    .Object "Obj"
-      .Bool "hi"
-      .Variant "erg"
-        .Bool
-        .UInt
-        :done()
-      :done()
-    .Bool
-    .UInt
-    .Range
-    :done()
 
 -- helper that just appends 'ClientCapabilities' to the end
 -- of the given name bc i am lazy
@@ -2004,6 +2118,80 @@ json.Schema "TextDocumentItem"
 json.Schema "DidOpenTextDocumentParams"
   .TextDocumentItem "textDocument"
 
+json.Schema "PartialResultParams"
+  .Variant "partialResultToken"
+    .Int
+    .String
+    :done()
+
+json.Schema "WorkDoneProgressParams"
+  .Variant "workDoneToken"
+    .Int
+    .String
+    :done()
+
+json.Schema "TextDocumentIdentifier"
+  .String "uri"
+
+json.Schema "DocumentDiagnosticParams"
+  .extends 
+    .WorkDoneProgressParams
+    .PartialResultParams
+    :done()
+  .TextDocumentIdentifier "textDocument"
+  .String "identifier"
+  .String "previousResultId"
+
+json.NumericEnum "DiagnosticSeverity"
+  "Error"
+  "Warning"
+  "Information"
+  "Hint"
+
+json.Schema "CodeDescription"
+  .String "href"
+
+json.Schema "Location"
+  .String "uri"
+  .Range "range"
+
+json.Schema "DiagnosticRelatedInformation"
+  .Location "location"
+  .String "message"
+
+json.Schema "Diagnostic"
+  .Range "range"
+  .DiagnosticSeverity "severity"
+  .Variant "code"
+    .Int
+    .String
+    :done()
+  .CodeDescription "codeDescription"
+  .String "source"
+  .String "message"
+  .DiagnosticTag.Set "tags"
+  .SchemaArray "DiagnosticRelatedInformation" "relatedInformation"
+
+json.StringedEnum "DocumentDiagnosticReportKind"
+  { Full = "full" }
+  { Unchanged = "unchanged" }
+
+json.Schema "FullDocumentDiagnosticReport"
+  .DocumentDiagnosticReportKind "kind"
+  .String "result"
+  .SchemaArray "Diagnostic" "items"
+
+json.Schema "UnchangedDocumentDiagnosticReport"
+  .DocumentDiagnosticReportKind "kind"
+  .String "resultId"
+
+json.Schema "SemanticTokensParams"
+  .extends
+    .WorkDoneProgressParams
+    .PartialResultParams
+    :done()
+  .TextDocumentIdentifier "textDocument"
+  
 -- * --------------------------------------------------------------------------
 -- @schema_writing
 
@@ -2038,6 +2226,7 @@ f:write
 #include "iro/flags.h"
 #include "iro/containers/array.h"
 #include "iro/json/types.h"
+#include "../lsp/stringmap.h"
 
 namespace lsp
 {
@@ -2060,7 +2249,6 @@ f:write
 
 ]]
 
-
 f:close()
 
 local inst_list = {}
@@ -2071,6 +2259,6 @@ end
 
 table.sort(inst_list, function(a, b) return a[2] < b[2] end)
 
-for _,v in ipairs(inst_list) do
-  print(v[1], v[2])
+for i,v in ipairs(inst_list) do
+  print(i, v[1], v[2])
 end

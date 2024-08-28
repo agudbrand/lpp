@@ -24,6 +24,7 @@ b8 Server::init(Lpp* lpp)
   DEBUG("init\n");
   assert(lpp);
   this->lpp = lpp;
+  open_files.init();
   return true;
 }
 
@@ -31,7 +32,18 @@ b8 Server::init(Lpp* lpp)
  */
 void Server::deinit()
 {
+  open_files.deinit();
   *this = nil;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Helper to stop the server at certain points so I can attach and debug.
+ *  Needs to be removed eventually.
+ */
+static void pauseHere()
+{
+  DEBUG("pid is: ", getpid(), "\n");
+  raise(SIGSTOP);
 }
 
 /* ----------------------------------------------------------------------------
@@ -41,6 +53,13 @@ static b8 processError(Args... args)
 {
   ERROR(args...);
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static str getFileNameFromURI(str uri)
+{
+  return uri.sub("file:///"_str.len-1);
 }
 
 /* ----------------------------------------------------------------------------
@@ -71,7 +90,7 @@ static json::Object* tryGetObjectMember(json::Object* o, str name)
  *  Fills out a ServerCapabilities struct with what the lsp server 
  *  currently supports.
  */
-static void writeServerCapabilities(ServerCapabilities* out)
+static void writeServerCapabilities(Server* server, ServerCapabilities* out)
 {
   // Just use utf16 for now since its required to be supported.
   out->positionEncoding = PositionEncodingKind::UTF16;
@@ -145,12 +164,38 @@ static void writeServerCapabilities(ServerCapabilities* out)
 
   // Semantic tokens stuff.
   {
-    // Empty arrays for now.
-    out->semanticTokensProvider.legend.tokenTypes.init();
+    auto& tokenTypes = out->semanticTokensProvider.legend.tokenTypes;
+    if (!tokenTypes.init())
+      return;
+    for (str s : 
+          server->init_params->
+          capabilities.textDocument.semanticTokens.tokenTypes)
+    {
+      tokenTypes.push(s);
+    }
     out->semanticTokensProvider.legend.tokenModifiers.init();
-    out->semanticTokensProvider.range.setAsBoolean(false);
-    out->semanticTokensProvider.full.setAsBoolean(false);
+    out->semanticTokensProvider.range.setAsBoolean(true);
+    auto* full = out->semanticTokensProvider.full.setAsWithDelta();
+    full->delta = true;
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void addSemanticToken(
+    json::JSON* json,
+    json::Array* arr, 
+    s32 delta_line,
+    s32 delta_start,
+    s32 length,
+    s32 token_type,
+    s32 token_modifiers)
+{
+  arr->pushNumber(json, delta_line);
+  arr->pushNumber(json, delta_start);
+  arr->pushNumber(json, length);
+  arr->pushNumber(json, token_type);
+  arr->pushNumber(json, token_modifiers);
 }
 
 /* ----------------------------------------------------------------------------
@@ -160,9 +205,12 @@ static b8 processRequest(
     Server* server, 
     json::Object* request, 
     json::Object* response,
-    json::JSON* json) // the JSON object containing the response
+    json::JSON* json,
+    mem::LenientBump* allocator) // the JSON object containing the response
 {
   using namespace json;
+
+  auto& capabilities = server->init_params->capabilities;
 
   Value* id = request->findMember("id"_str);
   if (!id)
@@ -191,6 +239,12 @@ static b8 processRequest(
   if (isnil(method))
     return processError("lsp request missing method\n");
 
+  DEBUG("processing method '", method, "'\n");
+
+  Object* params = tryGetObjectMember(request, "params"_str);
+  if (!params)
+    return processError("lsp request missing params\n");
+
   switch (method.hash())
   {
   default:
@@ -205,7 +259,14 @@ static b8 processRequest(
         return processError(
             "failed to initialize InitializeParams allocator\n");
 
-      if (!server->init_params.deserialize(
+      if (server->init_params)
+        return processError(
+            "initialize method appears to have been sent more than once\n");
+
+      server->init_params = 
+        server->init_params_allocator.construct<InitializeParams>();
+
+      if (!server->init_params->deserialize(
             params, 
             &server->init_params_allocator))
         return processError("failed to deserialize InitializeParams\n");
@@ -213,12 +274,12 @@ static b8 processRequest(
       InitializeResult init_result;
       init_result.serverInfo.name = "lpplsp"_str;
       init_result.serverInfo.version = "0.0.1"_str;
-      writeServerCapabilities(&init_result.capabilities);
+      writeServerCapabilities(server, &init_result.capabilities);
 
       Value* response_result = json->newValue(Value::Kind::Object);
       if (!response_result)
         return processError("failed to create response result object\n");
-      if (!response_result->init())
+      if (!response_result->init(allocator))
         return processError("failed to initialize response result object\n");
       response->addMember("result"_str, response_result);
 
@@ -236,11 +297,47 @@ static b8 processRequest(
             &response_result->object, 
             &init_result_allocator))
         return processError("failed to serialize InitializeResult\n");
-
-      json->prettyPrint(&fs::stdout);
     }
     break;
-  }
+  case "textDocument/diagnostic"_hashed:
+    {
+      DocumentDiagnosticParams ddp;
+      if (!ddp.deserialize(params, allocator))
+        return processError(
+            "failed to deserialize DocumentDiagnosticParams\n");
+ 
+      File* file = 
+        server->open_files.getFile(getFileNameFromURI(ddp.textDocument.uri));
+
+      INFO(
+        "request diagnostics for ", file->filename, " which has contents ",
+        file->contents);
+    }
+    break;
+  case "textDocument/semanticTokens/full"_hashed:
+    {
+      SemanticTokensParams stp;
+      if (!stp.deserialize(params, allocator))
+        return processError(
+            "failed to deserialize SemanticTokensParams");
+
+      File* file = 
+        server->open_files.getFile(getFileNameFromURI(stp.textDocument.uri));
+      
+      Object* tokens = response->addObject(json, "result"_str, allocator);
+      if (!tokens)
+        return processError("failed to add result to response\n");
+
+      json::Array* data = tokens->addArray(json, "data"_str, 8, allocator);
+      if (!data)
+        return processError("failed to add data to result"_str);
+
+      response->addString(json, "resultId"_str, "hello"_str);
+
+      addSemanticToken(json, data, 1, 2, 3, 0, 0);
+    }
+    break;
+  } 
 
   return true;
 }
@@ -273,63 +370,24 @@ static b8 processNotification(Server* server, json::Object* notification)
         return processError("failed to initialize allocator\n");
       defer { allocator.deinit(); };
 
-      DidOpenTextDocumentParams did_open_params;
-      if (!did_open_params.deserialize(params, &allocator))
+      DidOpenTextDocumentParams dop;
+      if (!dop.deserialize(params, &allocator))
         return processError(
             "failed to deserialize textDocument/didOpen params\n");
       
-      str uri = did_open_params.textDocument.uri;
-      str file = uri.sub("file:///"_str.len-1);
+      str file = getFileNameFromURI(dop.textDocument.uri);
 
-      INFO("opened file ", file, "\n");
+      File* doc = server->open_files.getOrCreateFile(file);
+      if (!doc)
+        return processError(
+            "failed to add open files entry for '", file, "'\n");
+
+      if (!server->open_files.updateFileContents(doc, dop.textDocument.text))
+        return processError(
+            "failed to update contents of file '", file, "'\n");
     }
     break;
   }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 parseTestFile(Server* server)
-{
-  auto f = fs::File::from("test.json"_str, fs::OpenFlag::Read);
-  if (isnil(f))
-    return false;
-  defer { f.close(); };
-
-  json::JSON json;
-  if (!json.init())
-    return processError("failed to init json object for test file\n");
-
-  json::Parser parser;
-
-  jmp_buf failjmp;
-  if (setjmp(failjmp))
-    return false;
-
-  if (!parser.init(&f, &json, "test.json"_str, &failjmp))
-    return false;
-  defer { parser.deinit(); json.deinit(); };
-
-  if (!parser.start())
-    return false;
-
-  json.prettyPrint(&fs::stdout);
-
-  json::JSON response_json;
-  if (!response_json.init())
-    return processError("failed to initialize response json object\n");
-
-  response_json.root = response_json.newValue(json::Value::Kind::Object);
-  response_json.root->init();
-
-  if (!processRequest(
-        server,
-        &json.root->object,
-        &response_json.root->object,
-        &response_json))
-    return false;
 
   return true;
 }
@@ -341,10 +399,7 @@ b8 Server::loop()
   io::Memory buffer;
   buffer.open();
 
-  // return parseTestFile(this);
-
-  // DEBUG("pid is: ", getpid(), "\n");
-  // raise(SIGSTOP);
+  pauseHere();
 
   DEBUG("entering server loop\n");
 
@@ -408,7 +463,7 @@ b8 Server::loop()
       f.close();
     }
 
-    // TRACE(buffer.asStr(), "\n");
+    TRACE(buffer.asStr(), "\n");
 
     json::JSON json;
     if (!json.init())
@@ -441,18 +496,27 @@ b8 Server::loop()
       response_json.root = response_json.newValue(json::Value::Kind::Object);
       response_json.root->init();
 
-      if (!processRequest(
+      mem::LenientBump allocator;
+      if (!allocator.init())
+        return processError(
+            "failed to initialize allocator for processing request\n");
+      defer { allocator.deinit(); };
+
+      if (processRequest(
             this,
             &json.root->object,
             &response_json.root->object,
-            &response_json))
-        return false;
-
-      buffer.clear();
-      response_json.prettyPrint(&buffer);
-      // TRACE(buffer.asStr());
-      io::formatv(&fs::stdout, "Content-Length: ", buffer.len, "\r\n\r\n");
-      fs::stdout.write(buffer.asStr());
+            &response_json,
+            &allocator))
+      {
+        buffer.clear();
+        response_json.prettyPrint(&buffer);
+        TRACE(buffer.asStr());
+        io::formatv(&fs::stdout, "Content-Length: ", buffer.len, "\r\n\r\n");
+        fs::stdout.write(buffer.asStr());
+      }
+      else
+        WARN("failed to process request\n");
     }
     else
     {
@@ -460,7 +524,7 @@ b8 Server::loop()
       if (!processNotification(
             this,
             &json.root->object))
-        return false;
+        WARN("failed to process notification\n");
     }
   }
 

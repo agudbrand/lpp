@@ -9,7 +9,10 @@
 #include "iro/common.h"
 #include "iro/unicode.h"
 #include "iro/json/types.h"
+
 #include "generated/lsp.h"
+
+#include "filemap.h"
 
 #include "lpp.h"
 
@@ -24,13 +27,13 @@ struct Server
 {
   Lpp* lpp = nullptr;
 
-  str root_path;
-  str root_uri;
+  str root_path = nil;
+  str root_uri = nil;
 
-  InitializeParams init_params;
-  mem::LenientBump init_params_allocator;
+  InitializeParams* init_params = nullptr;
+  mem::LenientBump init_params_allocator = {};
 
-  AVL<str, utf8::stringHash> open_files;
+  FileMap open_files;
 
   b8   init(Lpp* lpp);
   void deinit();

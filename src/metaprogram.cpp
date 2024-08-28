@@ -106,16 +106,12 @@ b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
   this->instream = instream;
   this->input = input;
   this->output = output;
-  input_line_map = Array<InputLineMapping>::create();
-  if (!buffers.init())
-    return false;
-  if (!sections.init())
-    return false;
-  if (!scope_stack.init())
-    return false;
-  if (!expansions.init())
-    return false;
-  cursors = CursorPool::create();
+  if (!input_line_map.init()) return false;
+  if (!buffers.init()) return false;
+  if (!sections.init()) return false;
+  if (!scope_stack.init()) return false;
+  if (!expansions.init()) return false;
+  if (!cursors.init()) return false;
   return true;
 }
 
@@ -128,7 +124,7 @@ void Metaprogram::deinit()
   for (auto& scope : scope_stack)
     scope.deinit();
   scope_stack.deinit();
-  cursors.destroy();
+  cursors.deinit();
   expansions.deinit();
   buffers.deinit();
   *this = {};
