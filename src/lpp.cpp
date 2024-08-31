@@ -4,7 +4,9 @@
 #include "iro/fs/fs.h"
 #include "iro/argiter.h"
 
-#include "lsp/server.h"
+// Disabled for now since im giving up working on this and it 
+// actually causes clang to crash when compiling sometimes lol.
+// #include "lsp/server.h"
 
 #include "assert.h"
 
@@ -17,7 +19,12 @@
 extern "C"
 {
 #include "lua.h"
+
+int lua__cwd(lua_State* L);
 }
+
+namespace lpp
+{
 
 static Logger logger = Logger::create("lpp"_str, Logger::Verbosity::Debug);
 
@@ -48,6 +55,14 @@ b8 Lpp::init()
   }
 
   input = output = nil;
+
+#define addGlobalCFunc(name) \
+  lua.pushcfunction(name); \
+  lua.setglobal(STRINGIZE(name));
+
+  addGlobalCFunc(lua__cwd);
+
+#undef addGlobalCFunc
 
   DEBUG("loading lpp lua module\n");
   if (!lua.require("lpp"_str))
@@ -86,15 +101,17 @@ void Lpp::deinit()
  */
 static b8 runLsp(Lpp* lpp)
 {
-  DEBUG("running lsp\n");
+  assert(!"lsp has been disabled for now");
+  return true;
+  // DEBUG("running lsp\n");
 
-  lsp::Server server;
+  // lsp::Server server;
 
-  if (!server.init(lpp))
-    return false;
-  defer { server.deinit(); };
+  // if (!server.init(lpp))
+  //   return false;
+  // defer { server.deinit(); };
 
-  return server.loop();
+  // return server.loop();
 }
 
 /* ----------------------------------------------------------------------------
@@ -243,6 +260,28 @@ b8 Lpp::processArgv(int argc, const char** argv)
       output = iter.current;
       break;
 
+    // A 'require' directory. Will append the given path + ?.lua to 
+    // package.path.
+    case "R"_hashed:
+      iter.next();
+      if (isnil(iter.current))
+      {
+        FATAL("expected a path after '-R'\n");
+        return false;
+      }
+      lua.getglobal("package");
+      lua.pushstring("path"_str);
+      lua.gettable(-2);
+      lua.pushstring(";"_str);
+      lua.pushstring(iter.current);
+      lua.pushstring("/?.lua"_str);
+      lua.concat(4);
+      lua.pushstring("path"_str);
+      lua.pushvalue(-2);
+      lua.settable(-4);
+      lua.pop(2);
+      break;
+
     default:
       passthroughToLua();
     }
@@ -384,6 +423,24 @@ void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
   mpbuf.memhandle->close();
 }
 
+/* ----------------------------------------------------------------------------
+ *  Used internally to get the current working directory so that we can
+ *  append it to package.path, since for some reason its empty in lpp
+ *  files??
+ */
+LPP_LUAJIT_FFI_FUNC
+int lua__cwd(lua_State* L)
+{
+  auto cwd = fs::Path::cwd();
+  defer { cwd.destroy(); };
+
+  auto s = cwd.buffer.asStr();
+
+  lua_pushlstring(L, (char*)s.bytes, s.len);
+
+  return 1;
 }
 
+}
 
+}

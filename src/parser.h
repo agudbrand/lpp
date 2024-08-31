@@ -11,6 +11,9 @@
 #include "lex.h"
 #include "csetjmp"
 
+namespace lpp
+{
+
 struct Parser
 {
   Array<Token> tokens;
@@ -49,5 +52,7 @@ struct Parser
   template<typename... T>
   void writeOut(T... args);
 };
+
+}
 
 #endif // _lpp_parser_h

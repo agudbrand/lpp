@@ -66,6 +66,7 @@ ffi.cdef
   b8 sectionIsDocument(SectionNode* section);
 
   b8 sectionInsertString(SectionNode* section, u64 offset, str s);
+  b8 sectionAppendString(SectionNode* section, str s);
 
   str sectionGetString(SectionNode* section);
 

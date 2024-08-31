@@ -5,6 +5,9 @@
 #include "ctype.h"
 #include "assert.h"
 
+namespace lpp
+{
+
 static Logger logger = 
   Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
@@ -211,7 +214,9 @@ b8 Lexer::run()
 
     if (at('$'))
     {
+      initCurt();
       advance();
+      finishCurt(DollarSign);
       if (at('$'))
       {
         advance();
@@ -412,4 +417,4 @@ void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
   }
 }
 
-
+}

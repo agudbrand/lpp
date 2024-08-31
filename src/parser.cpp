@@ -4,6 +4,9 @@
 
 #include "ctype.h"
 
+namespace lpp
+{
+
 static Logger logger = 
   Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
 
@@ -80,6 +83,10 @@ b8 Parser::run()
     {
       case Invalid:
         return false;
+
+      case DollarSign: // included for lsp stuff
+        nextToken();
+        break;
 
       case Document:
         TRACE("placing document text: '", 
@@ -212,4 +219,6 @@ b8 Parser::at(Token::Kind kind)
 str Parser::getRaw()
 {
   return curt->getRaw(source);
+}
+
 }

@@ -26,6 +26,9 @@ using namespace iro;
 // Use on functions that need to be exposed to luajit's ffi interface.
 #define LPP_LUAJIT_FFI_FUNC EXPORT_DYNAMIC
 
+namespace lpp
+{
+
 struct Metaprogram;
 
 struct Lpp
@@ -51,5 +54,7 @@ struct Lpp
   b8 processArgv(int argc, const char** argv);
   b8 processStream(str name, io::IO* instream, io::IO* outstream);
 }; 
+
+}
 
 #endif // _lpp_lpp_h

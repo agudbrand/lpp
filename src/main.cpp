@@ -14,6 +14,8 @@
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
+using namespace lpp;
+
 int main(int argc, const char** argv) 
 {
   iro::log.init();

@@ -16,6 +16,8 @@ local buffer = require "string.buffer"
 local List = require "list"
 local Twine = require "twine"
 
+package.path = package.path..";"..lua__cwd().."/?.lua"
+
 local strtype = ffi.typeof("str")
 local strToLua = function(s)
   return ffi.string(s.s, s.len)
@@ -70,7 +72,10 @@ lpp.final_callbacks = List{}
 lpp.runFinalCallbacks = function()
   if lpp.final_callbacks:isEmpty() then return end
 
-  
+  local section = lpp.getCurrentSection()
+  lpp.final_callbacks:each(function(f)
+    f(section)
+  end)
 end
 
 -- * --------------------------------------------------------------------------
@@ -265,6 +270,16 @@ end
 ---@return boolean
 Section.insertString = function(self, offset, text)
   return 0 ~= C.sectionInsertString(self.handle, offset, luaToStr(text))
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Appens text at the end of the given section.
+---
+---@param text string
+---@return boolean
+Section.appendString = function(self, text)
+  return 0 ~= C.sectionAppendString(self.handle, luaToStr(text))
 end
 
 -- * --------------------------------------------------------------------------

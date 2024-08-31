@@ -4,8 +4,11 @@
 #include "iro/linemap.h"
 #include "iro/fs/file.h"
 
+namespace lpp
+{
+
 static Logger logger = 
-  Logger::create("lpp.metaprog"_str, Logger::Verbosity::Trace);
+  Logger::create("lpp.metaprog"_str, Logger::Verbosity::Notice);
 
 /* ----------------------------------------------------------------------------
  */
@@ -67,13 +70,14 @@ b8 Section::insertString(u64 offset, str s)
   assert(offset <= buffer->len);
 
   buffer->reserve(s.len + 1);
-  buffer->commit(s.len + 1);
 
   mem::move(
     buffer->buffer + offset + s.len, 
     buffer->buffer + offset, 
-    buffer->len - offset);
+    (buffer->len - offset) + 1);
   mem::copy(buffer->buffer + offset, s.bytes, s.len);
+
+  buffer->commit(s.len + 1);
 
   return true;
 }
@@ -562,6 +566,10 @@ b8 Metaprogram::errorAt(s32 offset, T... args)
   return false;
 }
 
+}
+
+using namespace lpp;
+
 extern "C"
 {
 
@@ -793,6 +801,15 @@ b8 sectionInsertString(SectionNode* section, u64 offset, str s)
 {
   assert(sectionIsDocument(section));
   return section->data->insertString(offset, s);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+b8 sectionAppendString(SectionNode* section, str s)
+{
+  assert(sectionIsDocument(section));
+  return section->data->insertString(section->data->buffer->len, s);
 }
 
 /* ----------------------------------------------------------------------------

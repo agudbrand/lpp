@@ -14,6 +14,9 @@
 
 #include "source.h"
 
+namespace lpp
+{
+
 struct MetaprogramContext;
 struct Lpp;
 
@@ -74,15 +77,16 @@ struct Section
   b8 consumeFromBeginning(u64 len);
 };
 
+}
 
 namespace iro::io
 {
 
-static s64 format(io::IO* io, Section::Kind& kind)
+static s64 format(io::IO* io, lpp::Section::Kind& kind)
 {
   switch (kind)
   {
-#define c(x) case Section::Kind::x: return format(io, STRINGIZE(x));
+#define c(x) case lpp::Section::Kind::x: return format(io, STRINGIZE(x));
   c(Invalid);
   c(Document);
   c(Macro);
@@ -92,6 +96,9 @@ static s64 format(io::IO* io, Section::Kind& kind)
 }
 
 }
+
+namespace lpp
+{
 
 /* ============================================================================
  */
@@ -228,6 +235,8 @@ private:
     s32 lpp_runDocumentSectionCallbacks;
   } I;
 };
+
+}
 
 extern "C"
 {

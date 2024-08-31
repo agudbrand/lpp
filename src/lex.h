@@ -13,6 +13,9 @@
 
 #include "csetjmp"
 
+namespace lpp
+{
+
 struct Lpp;
 
 /* ============================================================================
@@ -37,6 +40,8 @@ struct Token
     // Any text that lpp is preprocessing. Eg. if we 
     // are preprocessing a C file, this is C code.
     Document, 
+
+    DollarSign,
   };
 
   Kind kind = Kind::Invalid;
@@ -51,7 +56,13 @@ struct Token
   str getRaw(Source* src) { return src->getStr(loc, len); }
 };
 
-DefineNilValue(Token, {}, { return x.kind == Token::Kind::Invalid; });
+}
+
+DefineNilValue(lpp::Token, {}, 
+    { return x.kind == lpp::Token::Kind::Invalid; });
+
+namespace lpp
+{
 
 /* ============================================================================
  *
@@ -119,15 +130,17 @@ private:
   b8 errorHere(T... args);
 };
 
+}
+
 namespace iro::io
 {
 
-static s64 format(io::IO* io, Token::Kind& kind)
+static s64 format(io::IO* io, lpp::Token::Kind& kind)
 {
   switch (kind)
   {
 #define c(x) \
-    case Token::Kind::x: return formatv(io, color::magenta(STRINGIZE(x)));
+    case lpp::Token::Kind::x: return formatv(io, color::magenta(STRINGIZE(x)));
   c(Invalid);
   c(Eof);
   c(LuaLine);
@@ -143,7 +156,7 @@ static s64 format(io::IO* io, Token::Kind& kind)
   }
 }
 
-static s64 format(io::IO* io, Token& token)
+static s64 format(io::IO* io, lpp::Token& token)
 {
   return io::formatv(io, 
       color::cyan("Token"), 

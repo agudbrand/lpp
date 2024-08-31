@@ -70,8 +70,8 @@ str Source::getStr(u64 loc, u64 len)
 Source::Loc Source::getLoc(u64 loc)
 {
   u64 l = 0, 
-    m = 0, 
-    r = line_offsets.len() - 1;
+      m = 0, 
+      r = line_offsets.len() - 1;
 
   while (l <= r)
   {

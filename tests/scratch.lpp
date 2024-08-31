@@ -1,9 +1,45 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
+$ local List = require "list"
+$ require "lppclang" .init("../lppclang/build/debug/liblppclang.so")
+$ local ctx = require "ctx"
+$ local struct = require "struct"
+$$$
+
+local include = function(path)
+  local formed = '#include "'..path..'"'
+
+  ctx:parseString(formed)
+
+  return formed
+end
+
+$$$
+
+@include "stdio.h"
+@include "iro/containers/array.h"
+ 
+using namespace iro;
+
+@struct Apple
+{
+  u32 leaves;
+};
+
+@struct Orange
+{
+  f32 peel_thickness;
+  f32 tint;
+};
+
+@struct Basket
+{
+  Apple apple;
+  Orange orange;
+};
 
 int main()
 {
-  $ for i=1,3 do
-  printf("hello!\n");
-  $ end
+  
 }
+
