@@ -14,7 +14,7 @@
 #include "iro/containers/avl.h"
 #include "iro/memory/bump.h"
 
-namespace lsp
+namespace lpp::lsp
 {
 
 using namespace iro;
@@ -94,6 +94,11 @@ struct FileMap
   b8 updateFileContents(File* file, str contents)
   {
     assert(file);
+
+    if (notnil(file->contents))
+    {
+      mem::stl_allocator.free(file->contents.bytes);
+    }
 
     file->contents = contents.allocateCopy();
 

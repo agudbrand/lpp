@@ -11,7 +11,7 @@
 #include "ctype.h"
 #include "cstdlib"
 
-namespace lsp
+namespace lpp::lsp
 {
 
 // static auto logger = 
@@ -87,6 +87,27 @@ static json::Object* tryGetObjectMember(json::Object* o, str name)
 }
 
 /* ----------------------------------------------------------------------------
+ */
+enum class TokenType
+{
+  Operator,
+  COUNT,
+};
+
+/* ----------------------------------------------------------------------------
+ */
+str getTokenTypeName(TokenType t)
+{
+  using enum TokenType;
+  switch (t)
+  {
+  case Operator: return "operator"_str;
+  }
+  assert(!"invalid TokenType");
+  return nil;
+}
+
+/* ----------------------------------------------------------------------------
  *  Fills out a ServerCapabilities struct with what the lsp server 
  *  currently supports.
  */
@@ -95,8 +116,11 @@ static void writeServerCapabilities(Server* server, ServerCapabilities* out)
   // Just use utf16 for now since its required to be supported.
   out->positionEncoding = PositionEncodingKind::UTF16;
 
-  // Not sure yet.
-  out->textDocumentSync = TextDocumentSyncKind::Full;
+  // Get doc opened and closed notifications and always send the 
+  // entire document when its changed. 
+  // TODO(sushi) setup partial updates.
+  out->textDocumentSync.openClose = true;
+  out->textDocumentSync.change = TextDocumentSyncKind::Full;
 
   // Don't know what exactly this is yet.
   out->completionProvider.completionItem.labelDetailsSupport = false;
@@ -167,12 +191,14 @@ static void writeServerCapabilities(Server* server, ServerCapabilities* out)
     auto& tokenTypes = out->semanticTokensProvider.legend.tokenTypes;
     if (!tokenTypes.init())
       return;
-    for (str s : 
-          server->init_params->
-          capabilities.textDocument.semanticTokens.tokenTypes)
+
+    for (TokenType t = (TokenType)0; 
+         (u32)t < (u32)TokenType::COUNT; 
+         t = (TokenType)((u32)t + 1))
     {
-      tokenTypes.push(s);
+      tokenTypes.push(getTokenTypeName(t));
     }
+
     out->semanticTokensProvider.legend.tokenModifiers.init();
     out->semanticTokensProvider.range.setAsBoolean(true);
     auto* full = out->semanticTokensProvider.full.setAsWithDelta();
@@ -334,7 +360,57 @@ static b8 processRequest(
 
       response->addString(json, "resultId"_str, "hello"_str);
 
-      addSemanticToken(json, data, 1, 2, 3, 0, 0);
+      auto view = io::StringView::from(file->contents);
+
+      Source src;
+      src.init(file->filename);
+      defer { src.deinit(); };
+
+      lpp::Lexer lexer;
+      lexer.init(&view, &src);
+      defer { lexer.deinit(); };
+
+      lexer.run();
+
+      src.cacheLineOffsets();
+
+      u32 last_line = 0;
+      u32 last_column = 0;
+      for (Token t : lexer.tokens)
+      {
+        using TKind = Token::Kind;
+        switch (t.kind)
+        {
+        case TKind::DollarSign:
+          {
+            Source::Loc loc = src.getLoc(t.loc);
+            u32 line = loc.line - 1;
+            u32 column = loc.column - 1;
+            INFO("loc: ", loc.line, ":", loc.column, "\n");
+            addSemanticToken(json, data, 
+              line - last_line,
+              (line == last_line? 
+                column - last_column : 
+                column),
+              1,
+              (u32)TokenType::Operator,
+              0);
+            last_line = line;
+            last_column = column;
+          }
+          break;
+        case TKind::MacroSymbol:
+          {
+
+          }
+          break;
+        }
+      }
+    }
+    break;
+  case "textDocument/completion"_hashed:
+    {
+      response->addNull(json, "result"_str);
     }
     break;
   } 
@@ -382,9 +458,39 @@ static b8 processNotification(Server* server, json::Object* notification)
         return processError(
             "failed to add open files entry for '", file, "'\n");
 
+      INFO(dop.textDocument.text, "\n");
+
       if (!server->open_files.updateFileContents(doc, dop.textDocument.text))
         return processError(
             "failed to update contents of file '", file, "'\n");
+    }
+    break;
+  case "textDocument/didChange"_hashed:
+    {
+      Object* params = tryGetObjectMember(notification, "params"_str);
+      if (!params)
+        return processError("lsp request missing params\n");
+
+      mem::LenientBump allocator;
+      if (!allocator.init())
+        return processError("failed to initialize allocator\n");
+      defer { allocator.deinit(); };
+
+      DidChangeTextDocumentParams dcp;
+      if (!dcp.deserialize(params, &allocator))
+        return processError(
+            "failed to deserialize textDocument/didChange params\n");
+
+      str file = getFileNameFromURI(dcp.textDocument.uri);
+
+      File* doc = server->open_files.getFile(file);
+      if (!doc)
+        return processError("failed to find open file '", file, "'\n");
+
+      for (TextDocumentContentChangeEvent& change : dcp.contentChanges)
+      {
+        server->open_files.updateFileContents(doc, change.text);
+      }
     }
     break;
   }

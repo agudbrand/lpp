@@ -18,7 +18,7 @@
 
 using namespace iro;
 
-namespace lsp
+namespace lpp::lsp
 {
 
 /* ============================================================================
@@ -43,6 +43,6 @@ struct Server
 
 } // namespace lsp
 
-DefineNilValue(lsp::Server, {}, { return x.lpp == nullptr; });
+DefineNilValue(lpp::lsp::Server, {}, { return x.lpp == nullptr; });
 
 #endif // _lpp_lsp_server_h
