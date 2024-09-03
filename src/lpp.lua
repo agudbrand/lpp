@@ -16,8 +16,6 @@ local buffer = require "string.buffer"
 local List = require "list"
 local Twine = require "twine"
 
-package.path = package.path..";"..lua__cwd().."/?.lua"
-
 local strtype = ffi.typeof("str")
 local strToLua = function(s)
   return ffi.string(s.s, s.len)
@@ -52,7 +50,14 @@ local MacroExpansion,
 ---@field doc_callbacks List
 --- List of callbacks to be executed in reverse order on the final result.
 ---@field final_callbacks List
+--- Dependencies, eg. anything the preprocessed file imports, includes, etc.
+---@field dependencies List
+--- Include dirs specified via -I on the command line.
+---@field include_dirs List
 local lpp = {}
+
+lpp.dependencies = List{}
+lpp.include_dirs = List{}
 
 -- * --------------------------------------------------------------------------
 
@@ -118,6 +123,13 @@ end
 
 -- * --------------------------------------------------------------------------
 
+--- Adds an include dir. Mostly for use internally.
+lpp.addIncludeDir = function(path)
+  lpp.include_dirs:push(path)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- Process the file at 'path' with lpp. 
 ---
 --- Returns the final output of the evaluated file as a string.
@@ -125,15 +137,19 @@ end
 ---@param path string
 ---@return string
 lpp.processFile = function(path)
-  local mpb = assert(C.processFile(lpp.handle, luaToStr(path)),
-          "failed to get memory buffer from processFile")
+  lpp.dependencies:push(path)
+  return lua__processFile(lpp.handle, path)
+end
 
-  local result = buffer.new(mpb.memsize)
-  local buf = result:ref()
+-- * --------------------------------------------------------------------------
 
-  C.getMetaprogramResult(mpb, buf)
-
-  return ffi.string(buf, mpb.memsize)
+--- Wrapper around including in C/C++ that tracks what is included so we
+--- can generate proper depedencies for lake. This just returns the 
+--- contents of the file and is intended to be used as a macro.
+---
+---@param path string
+lpp.include = function(path)
+  lpp.dependencies:push(path)
 end
 
 -- * --------------------------------------------------------------------------
@@ -181,6 +197,7 @@ end
 lpp.consumeCurrentScope = function()
   return strToLua(C.metaprogramConsumeCurrentScopeString(lpp.context))
 end
+
 
 -- * ==========================================================================
 -- *   Section

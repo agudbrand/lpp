@@ -164,7 +164,7 @@ b8 Parser::run()
         nextToken(); // identifier
 
         locmap.push({.from = bytes_written, .to = curt->loc});
-        writeOut(getRaw());
+        writeOut('"', getRaw(), "\",", getRaw());
 
         nextToken();
         if (at(MacroArgumentTupleArg))

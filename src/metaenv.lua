@@ -49,12 +49,7 @@ return function(ctx)
     C.metaprogramAddDocumentSection(ctx, start, makeStr(s))
   end
 
-  menv.macro = function(start, indent, macro, ...)
-    local args = {...}
-    if not macro then
-      error("macro identifier is nil", 2)
-    end
-
+  menv.macro = function(start, indent, name, macro, ...)
     -- capture where this macro was invoked in phase 1
     local invoke_capture = stackcapture(1)
 
@@ -62,7 +57,8 @@ return function(ctx)
       local proper_line
       local proper_src
       if call.src:sub(1,1) ~= "@" then
-        proper_line = C.metaprogramMapMetaprogramLineToInputLine(ctx, call.line)
+        proper_line = 
+          C.metaprogramMapMetaprogramLineToInputLine(ctx, call.line)
         proper_src = call.src
       else
         proper_src = call.src:sub(2)
@@ -72,6 +68,16 @@ return function(ctx)
       if call.name then
         log:error("in ", call.name, ": ")
       end
+    end
+
+    local args = {...}
+    if not macro then
+      for i=1,invoke_capture:len() do
+        printCall(invoke_capture[i])
+        log:error("\n")
+      end
+      log:error("macro with name "..name.." does not exist\n")
+      error({handled=true})
     end
 
     local invoker = function()
@@ -115,12 +121,12 @@ return function(ctx)
       end
     end
 
-    -- yeah this closure stuff seems pretty silly but 
-    -- it makes getting the macro to run a lot easier.
-    -- I'll need to profile this stuff later to see
-    -- if it has horrible effects
     table.insert(menv.macro_table, invoker)
-    C.metaprogramAddMacroSection(ctx, makeStr(indent), start, #menv.macro_table)
+    C.metaprogramAddMacroSection(
+      ctx, 
+      makeStr(indent), 
+      start, 
+      #menv.macro_table)
   end
 
   return M

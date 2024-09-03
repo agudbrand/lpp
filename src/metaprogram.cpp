@@ -69,7 +69,7 @@ b8 Section::insertString(u64 offset, str s)
 {
   assert(offset <= buffer->len);
 
-  buffer->reserve(s.len + 1);
+  buffer->reserve(s.len);
 
   mem::move(
     buffer->buffer + offset + s.len, 
@@ -77,7 +77,7 @@ b8 Section::insertString(u64 offset, str s)
     (buffer->len - offset) + 1);
   mem::copy(buffer->buffer + offset, s.bytes, s.len);
 
-  buffer->commit(s.len + 1);
+  buffer->commit(s.len);
 
   return true;
 }
@@ -219,7 +219,8 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
 
   Source::Loc old = input->getLoc(expansion.from);
   Source::Loc nu  = output->getLoc(expansion.to);
-  INFO(old.line, ":", old.column, "(", expansion.from, ") -> ", 
+  INFO(
+     old.line, ":", old.column, "(", expansion.from, ") -> ", 
      nu.line, ":", nu.column, "(", expansion.to, ")\n");
 }
 
@@ -270,6 +271,7 @@ b8 Metaprogram::run()
 
   DEBUG(parsed_program.asStr(), "\n");
 
+#if LPP_DEBUG
   {
     auto f = 
       scoped(fs::File::from("temp/parsed"_str, 
@@ -278,6 +280,7 @@ b8 Metaprogram::run()
         | fs::OpenFlag::Truncate));
     f.write(parsed_program.asStr());
   }
+#endif
 
   // TODO(sushi) do this better ok ^_^
   //
@@ -500,7 +503,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
 
         if (!lua.isnil())
         {
-          // error handling and MacroExpansion stuff is handled
+          // Error handling and MacroExpansion stuff is handled
           // in lua, we know this is a string if there's anything.
           scope->writeBuffer(lua.tostring());
         }

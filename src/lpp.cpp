@@ -20,13 +20,19 @@ extern "C"
 {
 #include "lua.h"
 
-int lua__cwd(lua_State* L);
+int lua__processFile(lua_State* L);
 }
 
 namespace lpp
 {
 
-static Logger logger = Logger::create("lpp"_str, Logger::Verbosity::Debug);
+static Logger logger = 
+  Logger::create("lpp"_str, 
+#if LPP_DEBUG
+    Logger::Verbosity::Debug);
+#else
+    Logger::Verbosity::Notice);
+#endif
 
 const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
@@ -60,7 +66,7 @@ b8 Lpp::init()
   lua.pushcfunction(name); \
   lua.setglobal(STRINGIZE(name));
 
-  addGlobalCFunc(lua__cwd);
+  addGlobalCFunc(lua__processFile);
 
 #undef addGlobalCFunc
 
@@ -207,6 +213,10 @@ b8 Lpp::processArgv(int argc, const char** argv)
   lua.pushvalue(I_argv_table);
   lua.settable(I_lpp);
 
+  lua.pushstring("addIncludeDir"_str);
+  lua.gettable(I_lpp);
+  const s32 I_addIncludeDir = lua.gettop();
+
   lua.getglobal("table");
   const s32 I_table = lua.gettop();
 
@@ -280,6 +290,19 @@ b8 Lpp::processArgv(int argc, const char** argv)
       lua.pushvalue(-2);
       lua.settable(-4);
       lua.pop(2);
+      break;
+
+    case "I"_hashed:
+      iter.next();
+      if (isnil(iter.current))
+      {
+        FATAL("expected a path after '-I'\n");
+        return false;
+      }
+      lua.pushvalue(I_addIncludeDir);
+      lua.pushstring(iter.current);
+      if (!lua.pcall(1))
+        return false;
       break;
 
     default:
@@ -364,47 +387,28 @@ struct MetaprogramBuffer
 };
 
 /* ----------------------------------------------------------------------------
- *  Wrapper around an lpp context's create_metaprogram() and run_metaprogram(). This creates a 
- *  metaprogram, executes it, and then returns a handle to the memory buffer its stored in along 
- *  with the size needed to store it in memory. This must be passed back into 
- *  get_metaprogram_result() along with a luajit string buffer with enough space to fit the 
- *  program.
- *
- *  TODO(sushi) this seems really inefficient, but I think it should work fine as a first pass
- *              and can be made more efficient/elegant later.
- *              We could maybe create an io::IO that wraps a luajit string buffer and feed 
- *              this information directly to it, but that's for another time.
- *  TODO(sushi) we can maybe add a bool to run_metaprogram to instruct it to leave the metaprogram 
- *              on the lua stack instead of popping it when its finished. I don't know if doing 
- *              this is fine during a luajit ffi call, though, and I can't seem to find anyone 
- *              on the internet or in the luajit docs mentioning doing something similar.
- *              -- OK NOW this is not as possible because i've changed how buffers work,
- *                 buffer data is no longer stored in lua, we store it in Metaenvironment::Sections.
- *                 So this might just be how this has to be for now until I think of a better solution.
- *                 This might not even be that much better than making a lua string and passing it 
- *                 directly!!!!
- *  TODO(sushi) this is so dumb, just make this a normal lua C function and pass the result back
- *              as a string.
- */ 
+ */
 LPP_LUAJIT_FFI_FUNC
-MetaprogramBuffer processFile(Lpp* lpp, str path)
+int lua__processFile(lua_State* L)
 {
+  auto lua = LuaState::fromExistingState(L);
+  Lpp* lpp = lua.tolightuserdata<Lpp>(1);
+  str path = lua.tostring(2);
+
   auto f = fs::File::from(path, fs::OpenFlag::Read);
   if (isnil(f))
     return {};
   defer { f.close(); };
 
-  auto result = mem::stl_allocator.construct<io::Memory>();
-  result->open();
-  defer { result->close(); };
+  io::Memory mem;
+  mem.open();
+  defer { mem.close(); };
 
-  if (!lpp->processStream(path, &f, result))
-    return {};
+  if (!lpp->processStream(path, &f, &mem))
+    return 0;
 
-  MetaprogramBuffer out;
-  out.memhandle = result;
-  out.memsize = result->len;
-  return out;
+  lua.pushstring(mem.asStr());
+  return 1;
 }
 
 /* ----------------------------------------------------------------------------
@@ -421,24 +425,6 @@ void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
   }
 
   mpbuf.memhandle->close();
-}
-
-/* ----------------------------------------------------------------------------
- *  Used internally to get the current working directory so that we can
- *  append it to package.path, since for some reason its empty in lpp
- *  files??
- */
-LPP_LUAJIT_FFI_FUNC
-int lua__cwd(lua_State* L)
-{
-  auto cwd = fs::Path::cwd();
-  defer { cwd.destroy(); };
-
-  auto s = cwd.buffer.asStr();
-
-  lua_pushlstring(L, (char*)s.bytes, s.len);
-
-  return 1;
 }
 
 }

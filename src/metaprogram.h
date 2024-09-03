@@ -146,7 +146,6 @@ struct Scope
   void deinit();
 
   void writeBuffer(Bytes bytes) { buffer->write(bytes); }
-
 };
 typedef SLinkedPool<Scope> ScopePool;
 

@@ -178,11 +178,11 @@ b8 Lexer::run()
     s32 trailing_space_start = 0;
     s32 trailing_space_len = 0;
 
-    while (not at('@') and
-           not at('$') and
-           not eof())
+    while (
+        not at('@') and
+        not at('$') and
+        not eof())
     {
-
       if (trailing_space_len == 0)
       {
         if (isspace(current()) and not at('\n'))
@@ -319,7 +319,7 @@ b8 Lexer::run()
       //             @lib.func()
       // TODO(sushi) this could maybe be made more advanced by allowing 
       //             arbitrary whitespace between the dots.
-      while (atIdentifierChar() or at('.'))
+      while (atIdentifierChar() or at('.') or at(':'))
         advance();
       
       finishCurt(MacroIdentifier);
