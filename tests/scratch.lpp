@@ -1,45 +1,31 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
-$ local List = require "list"
-$ require "lppclang" .init("../lppclang/build/debug/liblppclang.so")
-$ local ctx = require "ctx"
-$ local struct = require "struct"
+
 $$$
 
-local include = function(path)
-  local formed = '#include "'..path..'"'
+local test = function()
+  local sec = lpp.getSectionAfterMacro()
 
-  ctx:parseString(formed)
+  sec:insertString(0, "hey")
+end
 
-  return formed
+local import = function(path)
+  local result = lpp.processFile(path)
+
+  local expansion = lpp.MacroExpansion.new()
+  expansion:pushBack(
+    lpp.MacroPart.new(
+      path, 0, 0, result))
+
+  return result
 end
 
 $$$
 
-@include "stdio.h"
-@include "iro/containers/array.h"
- 
-using namespace iro;
-
-@struct Apple
-{
-  u32 leaves;
-};
-
-@struct Orange
-{
-  f32 peel_thickness;
-  f32 tint;
-};
-
-@struct Basket
-{
-  Apple apple;
-  Orange orange;
-};
 
 int main()
 {
-  
+  @test
 }
+@import "tests/import/apple.lpp"
 
