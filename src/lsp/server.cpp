@@ -1,3 +1,5 @@
+// disabled for now
+#if 0
 #include "server.h"
 
 #include "iro/io/io.h"
@@ -638,3 +640,4 @@ b8 Server::loop()
 }
 
 } // namespace lsp
+#endif
