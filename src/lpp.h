@@ -43,6 +43,9 @@ struct Lpp
   str input;
   str output;
 
+  b8  generate_depfile;
+  str depfile_output;
+
   // True when we should run in lsp mode (--lsp).
   b8 lsp;
 

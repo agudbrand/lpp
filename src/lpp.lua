@@ -54,10 +54,14 @@ local MacroExpansion,
 ---@field dependencies List
 --- Include dirs specified via -I on the command line.
 ---@field include_dirs List
+--- If lpp is generating a dep file or not.
+---@field generating_dep_file boolean
 local lpp = {}
 
 lpp.dependencies = List{}
 lpp.include_dirs = List{}
+-- Set true in lpp.cpp if we are.
+lpp.generating_dep_file = false
 
 -- * --------------------------------------------------------------------------
 
@@ -73,24 +77,45 @@ end
 
 -- * --------------------------------------------------------------------------
 
-lpp.final_callbacks = List{}
-lpp.runFinalCallbacks = function()
-  if lpp.final_callbacks:isEmpty() then return end
-
-  local section = lpp.getCurrentSection()
-  lpp.final_callbacks:each(function(f)
-    f(section)
-  end)
-end
-
--- * --------------------------------------------------------------------------
-
 --- Registers a callback to be invoked at the beginning of each Document
 --- section. It will be invoked before any callbacks registered before it.
 ---
 ---@param f function
 lpp.registerDocumentSectionCallback = function(f)
   lpp.doc_callbacks:push(f)
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.final_callbacks = List{}
+lpp.runFinalCallbacks = function()
+  if lpp.final_callbacks:isEmpty() then return end
+
+  local result = lpp.getOutputSoFar()
+  lpp.final_callbacks:each(function(f)
+    f(result)
+  end)
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Registers a callback to be invoked after the entire file has been 
+--- processed. The result will be passed as an immutable string.
+--- It will be invoked before any callbacks registered before it.
+---
+-- TODO(sushi) make this editable if ever needed.
+---
+---@param f function
+lpp.registerFinal = function(f)
+  lpp.final_callbacks:push(f)
+end
+
+lpp.generateDepFile = function()
+  local buffer = buffer.new()
+  lpp.dependencies:each(function(dep)
+    buffer:put(dep, "\n")
+  end)
+  return buffer:get()
 end
 
 -- * --------------------------------------------------------------------------
@@ -123,6 +148,13 @@ end
 
 -- * --------------------------------------------------------------------------
 
+-- TODO(sushi) docs. Adding for use internally.
+lpp.addDependency = function(path)
+  lpp.dependencies:push(path)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- Adds an include dir. Mostly for use internally.
 lpp.addIncludeDir = function(path)
   lpp.include_dirs:push(path)
@@ -137,8 +169,24 @@ end
 ---@param path string
 ---@return string
 lpp.processFile = function(path)
-  lpp.dependencies:push(path)
   return lua__processFile(lpp.handle, path)
+end
+
+-- * --------------------------------------------------------------------------
+
+local lua_require = require
+require = function(path)
+  local normpath = path:gsub('%.', '/')
+  if lpp.generating_dep_file then
+    for pattern in package.path:gmatch("[^;]+") do
+      local fullpath = 
+        lua__getFileFullPathIfExists(pattern:gsub("?", normpath))
+      if fullpath then
+        lpp.dependencies:push(fullpath)
+      end
+    end
+  end
+  return lua_require(path)
 end
 
 -- * --------------------------------------------------------------------------

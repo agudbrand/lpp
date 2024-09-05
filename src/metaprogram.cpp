@@ -406,6 +406,11 @@ b8 Metaprogram::run()
   lua.gettable(I.lpp);
   I.lpp_runDocumentSectionCallbacks = lua.gettop();
 
+  TRACE("getting 'lpp.runFinalCallbacks'\n");
+  lua.pushstring("runFinalCallbacks"_str);
+  lua.gettable(I.lpp);
+  I.lpp_runFinalCallbacks = lua.gettop();
+
   // Retrieve the __metaenv table.
   TRACE("getting '__metaenv'\n");
   lua.pushstring("__metaenv"_str);
@@ -424,6 +429,11 @@ b8 Metaprogram::run()
     return false;
 
   output->writeCache(getCurrentScope()->buffer->asStr());
+
+  // Process the final callbacks.
+  lua.pushvalue(I.lpp_runFinalCallbacks);
+  if (!lua.pcall(0, 0, I.errhandler))
+    return false;
 
   output->cacheLineOffsets();
 

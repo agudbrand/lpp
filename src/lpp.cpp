@@ -1,5 +1,7 @@
 #include "lpp.h"
 
+#include "stdio.h"
+
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
 #include "iro/argiter.h"
@@ -21,6 +23,7 @@ extern "C"
 #include "lua.h"
 
 int lua__processFile(lua_State* L);
+int lua__getFileFullPathIfExists(lua_State* L);
 }
 
 namespace lpp
@@ -67,6 +70,7 @@ b8 Lpp::init()
   lua.setglobal(STRINGIZE(name));
 
   addGlobalCFunc(lua__processFile);
+  addGlobalCFunc(lua__getFileFullPathIfExists);
 
 #undef addGlobalCFunc
 
@@ -145,27 +149,62 @@ b8 Lpp::run()
   }
   defer { inf.close(); };
 
-  File outf;
-  if (isnil(output))
+  if (generate_depfile)
   {
-    outf = fs::stdout;
+    if (!processStream(input, &inf, nullptr))
+      return false;
+
+    if (!lua.require("lpp"_str))
+      return false;
+    const s32 I_lpp = lua.gettop();
+
+    lua.pushstring("generateDepFile"_str);
+    lua.gettable(I_lpp);
+
+    if (!lua.pcall(0, 1))
+      return false;
+    
+    str result = lua.tostring();
+
+    if (notnil(depfile_output))
+    {
+      auto outf = File::from(depfile_output,
+            OpenFlag::Create
+          | OpenFlag::Write
+          | OpenFlag::Truncate);
+
+      outf.write(result);
+      outf.close();
+    }
+    else
+    {
+      fs::stdout.write(result);
+    }
   }
   else
   {
-    outf = File::from(output, 
-          OpenFlag::Create
-        | OpenFlag::Write
-        | OpenFlag::Truncate);
+    File outf;
+    if (isnil(output))
+    {
+      outf = fs::stdout;
+    }
+    else
+    {
+      outf = File::from(output, 
+            OpenFlag::Create
+          | OpenFlag::Write
+          | OpenFlag::Truncate);
+    }
+    if (isnil(outf))
+    {
+      FATAL("failed to open output file at path '", output, "'\n");
+      return false;
+    }
+    defer { outf.close(); };
+    
+    if (!processStream(input, &inf, &outf))
+      return false;
   }
-  if (isnil(outf))
-  {
-    FATAL("failed to open output file at path '", output, "'\n");
-    return false;
-  }
-  defer { outf.close(); };
-  
-  if (!processStream(input, &inf, &outf))
-    return false;
 
   return true;
 }
@@ -254,19 +293,12 @@ b8 Lpp::processArgv(int argc, const char** argv)
     str arg = iter.current.sub(1);
     switch(arg.hash())
     {
-
     case "o"_hashed:
       if (notnil(output))
-      {
-        FATAL("output already specified as '", output, "'\n");
-        return false;
-      }
+        return FATAL("output already specified as '", output, "'\n");
       iter.next();
       if (isnil(iter.current))
-      {
-        FATAL("expected an output path after '-o'\n");
-        return false;
-      }
+        return FATAL("expected an output path after '-o'\n");
       output = iter.current;
       break;
 
@@ -275,10 +307,7 @@ b8 Lpp::processArgv(int argc, const char** argv)
     case "R"_hashed:
       iter.next();
       if (isnil(iter.current))
-      {
-        FATAL("expected a path after '-R'\n");
-        return false;
-      }
+        return FATAL("expected a path after '-R'\n");
       lua.getglobal("package");
       lua.pushstring("path"_str);
       lua.gettable(-2);
@@ -292,17 +321,32 @@ b8 Lpp::processArgv(int argc, const char** argv)
       lua.pop(2);
       break;
 
+    // An include directory, which will be searched when using lpp.include.
     case "I"_hashed:
       iter.next();
       if (isnil(iter.current))
-      {
-        FATAL("expected a path after '-I'\n");
-        return false;
-      }
+        return FATAL("expected a path after '-I'\n");
       lua.pushvalue(I_addIncludeDir);
       lua.pushstring(iter.current);
       if (!lua.pcall(1))
         return false;
+      break;
+
+    // Outputs a lake dependency file to the path given.
+    // Suppresses any normal output.
+    case "D"_hashed:
+      iter.next();
+      if (isnil(iter.current))
+        return FATAL("expected an output path for '-D'\n");
+      generate_depfile = true;
+      depfile_output = iter.current;
+      lua.pushstring("generating_dep_file"_str);
+      lua.pushboolean(true);
+      lua.settable(I_lpp);
+      break;
+
+    case "t"_hashed:
+      logger.verbosity = Logger::Verbosity::Trace;
       break;
 
     default:
@@ -369,7 +413,8 @@ b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
   if (!metaprog->run())
     return false;
 
-  outstream->write(metaprog->output->cache.asStr());
+  if (outstream)
+    outstream->write(metaprog->output->cache.asStr());
   
   return true;
 }
@@ -380,12 +425,6 @@ b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
 extern "C"
 {
 
-struct MetaprogramBuffer
-{
-  io::Memory* memhandle;
-  u64         memsize;
-};
-
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
@@ -393,7 +432,29 @@ int lua__processFile(lua_State* L)
 {
   auto lua = LuaState::fromExistingState(L);
   Lpp* lpp = lua.tolightuserdata<Lpp>(1);
-  str path = lua.tostring(2);
+  auto path = fs::Path::from(lua.tostring(2));
+
+  if (!path.makeAbsolute())
+  {
+    FATAL("failed to make path ", path, " absolute\n");
+    _exit(1);
+    return 0;
+  }
+
+  if (!lua.require("lpp"_str))
+    return 0;
+  const s32 I_lpp = lua.gettop();
+
+  lua.pushstring("addDependency"_str);
+  lua.gettable(I_lpp);
+
+  lua.pushstring(path.buffer.asStr());
+  if (!lua.pcall(1))
+  {
+    ERROR("failed to add dependency on ", path, "\n");
+    ERROR(lua.tostring(), "\n");
+    return 0;
+  }
 
   auto f = fs::File::from(path, fs::OpenFlag::Read);
   if (isnil(f))
@@ -404,7 +465,7 @@ int lua__processFile(lua_State* L)
   mem.open();
   defer { mem.close(); };
 
-  if (!lpp->processStream(path, &f, &mem))
+  if (!lpp->processStream(path.buffer.asStr(), &f, &mem))
     return 0;
 
   lua.pushstring(mem.asStr());
@@ -412,19 +473,38 @@ int lua__processFile(lua_State* L)
 }
 
 /* ----------------------------------------------------------------------------
- *  Copies into 'outbuf' the metaprogram stored in 'mpbuf'. If the metaprogram 
- *  cannot be retrieved for some reason then 'outbuf' should be null. Frees the 
- *  metaprogram memory in anycase.
  */
-LPP_LUAJIT_FFI_FUNC
-void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf)
+int lua__fileExists(lua_State* L)
 {
-  if (outbuf)
-  {
-    mpbuf.memhandle->read({(u8*)outbuf, mpbuf.memsize});
-  }
+  auto lua = LuaState::fromExistingState(L);
+  str path = lua.tostring(1);
+  lua.pushboolean(
+      fs::Path::exists(path) &&
+      fs::Path::isRegularFile(path));
+  return 1;
+}
 
-  mpbuf.memhandle->close();
+/* ----------------------------------------------------------------------------
+ */
+int lua__getFileFullPathIfExists(lua_State* L)
+{
+  using namespace fs;
+  auto lua = LuaState::fromExistingState(L);
+  auto pathstr = lua.tostring(1);
+  if (Path::exists(pathstr) &&
+      Path::isRegularFile(pathstr))
+  {
+    auto path = fs::Path::from(lua.tostring(1));
+    defer { path.destroy(); };
+    if (!path.makeAbsolute())
+    {
+      FATAL("failed to make path ", path, "absolute!\n");
+      _exit(1);
+    }
+    lua.pushstring(path.buffer.asStr());
+    return 1;
+  }
+  return 0;
 }
 
 }

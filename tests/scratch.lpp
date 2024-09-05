@@ -1,31 +1,32 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
+$ local List = require "list"
+$ require "lppclang" .init("../lppclang/build/debug/liblppclang.so")
 
 $$$
 
-local test = function()
-  local sec = lpp.getSectionAfterMacro()
+lpp.registerFinal(function(result)
+  local makedeps = 
+    lpp.clang.generateMakeDepFile(
+      result, 
+      List { "-I../iro" })
+  
+  for f in makedeps:gmatch("%S+") do
+    if f:sub(-1) == ":" or f == "\\" then
+      goto continue
+    end
 
-  sec:insertString(0, "hey")
-end
-
-local import = function(path)
-  local result = lpp.processFile(path)
-
-  local expansion = lpp.MacroExpansion.new()
-  expansion:pushBack(
-    lpp.MacroPart.new(
-      path, 0, 0, result))
-
-  return result
-end
+    lpp.addDependency(f)
+    
+    ::continue::
+  end
+end)
 
 $$$
 
+#include "iro/containers/array.h"
 
 int main()
 {
-  @test
 }
-@import "tests/import/apple.lpp"
 

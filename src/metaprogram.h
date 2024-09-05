@@ -167,10 +167,6 @@ struct Metaprogram
   Source* input;
   Source* output;
 
-  // Section we stream the result of the metaprogram into. This is stored as
-  // a Section so that the user can modify it using the same api.
-  Section output_section; 
-
   SectionNode* current_section;
 
   // A mapping from a line in the generated metaprogram 
@@ -232,6 +228,7 @@ private:
     s32 metaenv_table;
     s32 macro_table;
     s32 lpp_runDocumentSectionCallbacks;
+    s32 lpp_runFinalCallbacks;
   } I;
 };
 
