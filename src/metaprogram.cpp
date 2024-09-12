@@ -315,6 +315,7 @@ b8 Metaprogram::run()
   TRACE("loading parsed program\n");
   if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.bytes))
   {
+    ERROR(parsed_program.asStr(), "\n");
     // TODO(sushi) need to translate lines here
     ERROR("failed to load metaprogram into lua\n", lua.tostring(), "\n");
     return false;
