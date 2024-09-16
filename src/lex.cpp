@@ -178,6 +178,9 @@ b8 Lexer::run()
     s32 trailing_space_start = 0;
     s32 trailing_space_len = 0;
 
+    // TODO(sushi) implement escaping lpp's special characters by 
+    //             splitting the document at the escape character.
+
     while (
         not at('@') and
         not at('$') and
@@ -319,7 +322,8 @@ b8 Lexer::run()
       //             @lib.func()
       // TODO(sushi) this could maybe be made more advanced by allowing 
       //             arbitrary whitespace between the dots.
-      while (atIdentifierChar() or at('.') or at(':'))
+      // TODO(sushi) support ':' here. Requires special logic in the parser.
+      while (atIdentifierChar() or at('.'))
         advance();
       
       finishCurt(MacroIdentifier);
@@ -339,26 +343,70 @@ b8 Lexer::run()
           break;
         }
 
-        for (;;)
         {
+          u64 brace_nesting = 0;
+          u64 paren_nesting = 1;
+
           initCurt();
 
-          while (not at(',') and 
-               not at(')') and 
-               not eof())
+          for (;;)
+          {
+            while (
+                not at(',') and 
+                not at(')') and 
+                not at('{') and
+                not at('}') and
+                not at('(') and 
+                not at(')') and
+                not eof())
+              advance();
+
+            if (eof())
+              return errorAtToken(curt, 
+                  "unexpected end of file while consuming macro arguments");
+
+            b8 done = false;
+            b8 reset_curt = false;
+            switch (current())
+            {
+            case ',':
+              // Tuple macro syntax allows using braces in an argument 
+              // to suppress splitting the string by commas.
+              if (brace_nesting == 0)
+              {
+                finishCurt(MacroArgumentTupleArg);
+                reset_curt = true;
+              }
+              break;
+            case '(':
+              paren_nesting += 1;
+              break;
+            case ')':
+              if (paren_nesting == 1)
+                done = true;
+              else
+                paren_nesting -= 1;
+              break;
+            case '{':
+              brace_nesting += 1;
+              break;
+            case '}':
+              if (brace_nesting)
+                brace_nesting -= 1;
+              break;
+            }
+
+            if (done)
+            {
+              finishCurt(MacroArgumentTupleArg);
+              break;
+            }
+
             advance();
-
-          if (eof())
-            return errorAtToken(curt, 
-                "unexpected end of file while consuming macro arguments");
-
-          finishCurt(MacroArgumentTupleArg);
-
-          if (at(')'))
-            break;
-
-          advance();
-          skipWhitespace();
+            skipWhitespace();
+            if (reset_curt)
+              initCurt();
+          }
         }
 
         advance();
