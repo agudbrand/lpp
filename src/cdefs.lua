@@ -30,7 +30,6 @@ ffi.cdef
     u64 len;
   } Bytes;
   
-
   str getTokenIndentation(void* lpp, s32);
 
   typedef struct MetaprogramBuffer { void* memhandle; s64 memsize; } MetaprogramBuffer;
@@ -40,6 +39,7 @@ ffi.cdef
   typedef struct Metaprogram Metaprogram;
   typedef struct Cursor Cursor;
   typedef struct SectionNode SectionNode;
+  typedef struct Scope Scope;
 
   void metaprogramAddMacroSection(Metaprogram* ctx, str indentation, u64 start, u64 macro_idx);
   void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, str s);
@@ -76,5 +76,12 @@ ffi.cdef
   void metaprogramTrackExpansion(Metaprogram* ctx, u64 from, u64 to);
   s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line);
   str metaprogramConsumeCurrentScopeString(Metaprogram* mp);
+
+  SectionNode* metaprogramGetTopMacroInvocation(Metaprogram* mp);
+  Metaprogram* metaprogramGetPrev(Metaprogram* mp);
+
+  Scope* metaprogramGetCurrentScope(Metaprogram* mp);
+  Scope* scopeGetPrev(Scope* scope);
+  u64 scopeGetInvokingMacroIdx(Scope* scope);
 ]]
 

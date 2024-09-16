@@ -3,6 +3,7 @@
 #include "iro/fs/fs.h"
 #include "iro/common.h"
 #include "iro/logger.h"
+#include "iro/platform.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
@@ -32,10 +33,7 @@ int main(int argc, const char** argv)
     {
       flags = 
           AllowColor
-        | ShowCategoryName
         | ShowVerbosity
-        | TrackLongestName
-        | PadVerbosity
         | PrefixNewlines;
     }
     else

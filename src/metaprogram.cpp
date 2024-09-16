@@ -104,12 +104,18 @@ b8 Section::consumeFromBeginning(u64 len)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Metaprogram::init(Lpp* lpp, io::IO* instream, Source* input, Source* output)
+b8 Metaprogram::init(
+    Lpp* lpp, 
+    io::IO* instream, 
+    Source* input, 
+    Source* output,
+    Metaprogram* prev)
 {
   this->lpp = lpp;
   this->instream = instream;
   this->input = input;
   this->output = output;
+  this->prev = prev;
   if (!input_line_map.init()) return false;
   if (!buffers.init()) return false;
   if (!sections.init()) return false;
@@ -237,7 +243,7 @@ b8 Metaprogram::run()
 
   if (!lua.require("errhandler"_str))
   {
-    ERROR("failed to load errhandler moduln");
+    ERROR("failed to load errhandler module");
     return false;
   }
   I.errhandler = lua.gettop();
@@ -269,9 +275,10 @@ b8 Metaprogram::run()
   if (!parser.run())
     return false;
 
-  DEBUG(parsed_program.asStr(), "\n");
+  if (lpp->print_meta)
+    NOTICE(parsed_program.asStr(), "\n");
 
-#if LPP_DEBUG
+#if LPP_DEBUG && 0
   {
     auto f = 
       scoped(fs::File::from("temp/parsed"_str, 
@@ -334,7 +341,8 @@ b8 Metaprogram::run()
   lua.pushlightuserdata(this);
   if (!lua.pcall(1, 1))
   {
-    ERROR("metaenvironment construction function failed\n");
+    ERROR("metaenvironment construction function failed\n",
+          lua.tostring(), "\n");
     return false;
   }
   I.metaenv = lua.gettop();
@@ -358,6 +366,16 @@ b8 Metaprogram::run()
     return false;
   }
   I.lpp = lua.gettop();
+
+  // Push old context into lpp's context list.
+  // TODO(sushi) clean up restoring context logic since we do this now.
+  lua.pushstring("metaenvs"_str);
+  lua.gettable(I.lpp);
+  const s32 I_metaenvs = lua.gettop();
+  lua.pushstring("__metaenv"_str);
+  lua.gettable(I.metaenv);
+  const s32 I_metaenv__metaenv = lua.gettop();
+  lua.tableInsert(I_metaenvs, I_metaenv__metaenv);
 
   // Save the old context.
   lua.pushstring("context"_str);
@@ -419,10 +437,16 @@ b8 Metaprogram::run()
   I.metaenv_table = lua.gettop();
 
   // Get the metaenv's macro table.
-  TRACE("getting metaenvironment's macro table\n");
-  lua.pushstring("macro_table"_str);
+  TRACE("getting metaenvironment's macro invokers list\n");
+  lua.pushstring("macro_invokers"_str);
   lua.gettable(I.metaenv_table);
-  I.macro_table = lua.gettop();
+  I.macro_invokers = lua.gettop();
+
+  // Get the metaenv's macro invocation list.
+  TRACE("getting metaenvironment's macro invocation list\n");
+  lua.pushstring("macro_invocations"_str);
+  lua.gettable(I.metaenv_table);
+  I.macro_invocations = lua.gettop();
 
   TRACE("processing global scope\n");
 
@@ -490,6 +514,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         defer { current_section = save; };
 
         // Create a new Scope for the macro.
+        // TODO(sushi) this prob doesnt need to be heap.
         Scope* macro_scope = pushScope();
         if (!macro_scope)
           return false;
@@ -497,7 +522,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
 
         // Get the macro and execute it.
         lua.pushinteger(section->macro_idx);
-        lua.gettable(I.macro_table);
+        lua.gettable(I.macro_invokers);
         const s32 I_macro = lua.gettop();
 
         TRACE("invoking macro\n");
@@ -685,6 +710,53 @@ str metaprogramConsumeCurrentScopeString(Metaprogram* mp)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
+SectionNode* metaprogramGetTopMacroInvocation(Metaprogram* mp)
+{
+  assert(sectionIsMacro(mp->current_section));
+
+  SectionNode* walk = mp->current_section;
+
+  while (sectionIsMacro(walk) && walk->prev)
+    walk = walk->prev;
+
+  return walk;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+Metaprogram* metaprogramGetPrev(Metaprogram* mp)
+{
+  return mp->prev; 
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+Scope* metaprogramGetCurrentScope(Metaprogram* mp)
+{
+  return mp->getCurrentScope();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+Scope* scopeGetPrev(Scope* scope)
+{
+  return scope->prev;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+u64 scopeGetInvokingMacroIdx(Scope* scope)
+{
+  return (scope->macro_invocation? scope->macro_invocation->macro_idx : 0);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
 b8 cursorNextChar(Cursor* cursor)
 {
   Section* s = cursor->section->data;
@@ -707,7 +779,7 @@ b8 cursorNextChar(Cursor* cursor)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-u32  cursorCurrentCodepoint(Cursor* cursor)
+u32 cursorCurrentCodepoint(Cursor* cursor)
 {
   return cursor->current_codepoint.codepoint;
 }

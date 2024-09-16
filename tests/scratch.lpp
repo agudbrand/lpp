@@ -1,28 +1,9 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
-$ local List = require "list"
-$ require "lppclang" .init("../lppclang/build/debug/liblppclang.so")
 
-$$$
+int apple() {}
 
-lpp.registerFinal(function(result)
-  local makedeps = 
-    lpp.clang.generateMakeDepFile(
-      result, 
-      List { "-I../iro" })
-  
-  for f in makedeps:gmatch("%S+") do
-    if f:sub(-1) == ":" or f == "\\" then
-      goto continue
-    end
-
-    lpp.addDependency(f)
-    
-    ::continue::
-  end
-end)
-
-$$$
+@lpp.processFile "tests/imported.lpp"
 
 #include "iro/containers/array.h"
 

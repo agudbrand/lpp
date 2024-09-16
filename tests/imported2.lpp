@@ -1,0 +1,19 @@
+
+$$$
+
+bad = function()
+  local a = nil
+  local b = 1 + a
+end
+
+good = function()
+  return bad() + 2
+end
+
+$$$
+
+$ local nest = function()
+    @good
+$ end
+
+@nest

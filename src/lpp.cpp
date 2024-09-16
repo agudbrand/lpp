@@ -281,6 +281,10 @@ b8 Lpp::processArgv(int argc, const char** argv)
     case "lsp"_hashed:
       lsp = true;
       makeLspTempOut();
+      break;
+    case "print-meta"_hashed:
+      print_meta = true;
+      break;
     default:
       passthroughToLua();
     }
@@ -405,8 +409,9 @@ b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
     return false;
   defer { dest->deinit(); };
 
+  Metaprogram* prev = (metaprograms.isEmpty()? nullptr : &metaprograms.tail());
   Metaprogram* metaprog = metaprograms.pushTail()->data;
-  if (!metaprog->init(this, instream, source, dest))
+  if (!metaprog->init(this, instream, source, dest, prev))
     return false;
   defer { metaprog->deinit(); };
 
@@ -432,13 +437,13 @@ int lua__processFile(lua_State* L)
 {
   auto lua = LuaState::fromExistingState(L);
   Lpp* lpp = lua.tolightuserdata<Lpp>(1);
-  auto path = fs::Path::from(lua.tostring(2));
+  auto reqpath = lua.tostring(2);
+  auto path = fs::Path::from(reqpath);
 
   if (!path.makeAbsolute())
   {
     FATAL("failed to make path ", path, " absolute\n");
     _exit(1);
-    return 0;
   }
 
   if (!lua.require("lpp"_str))
@@ -465,7 +470,7 @@ int lua__processFile(lua_State* L)
   mem.open();
   defer { mem.close(); };
 
-  if (!lpp->processStream(path.buffer.asStr(), &f, &mem))
+  if (!lpp->processStream(reqpath, &f, &mem))
     return 0;
 
   lua.pushstring(mem.asStr());

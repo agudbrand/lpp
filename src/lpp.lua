@@ -24,6 +24,10 @@ local luaToStr = function(s)
   return strtype(s, #s)
 end
 
+string.startsWith = function(self, s)
+  return self:sub(1,#s) == s
+end
+
 local makeStruct = function()
   local o = {}
   o.__index = o
@@ -62,6 +66,9 @@ lpp.dependencies = List{}
 lpp.include_dirs = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
+
+-- Stack of metaenvs so that they may read each other.
+lpp.metaenvs = List{}
 
 -- * --------------------------------------------------------------------------
 
@@ -122,6 +129,9 @@ end
 
 local lua_error = error
 error = function(msg)
+  if type(msg) == "table" and msg.handled then 
+    lua_error()
+  end
   lua_error(msg, 0)
 end
 
@@ -434,7 +444,9 @@ MacroExpansion.__call = function(self, offset)
   self.list:each(function(x)
     if MacroPart.isTypeOf(x)
     then
-      C.metaprogramTrackExpansion(lpp.context, x.start, offset + #out)
+      if offset then
+        C.metaprogramTrackExpansion(lpp.context, x.start, offset + #out)
+      end
       out:put(tostring(x))
     else
       out:put(x)
@@ -442,6 +454,15 @@ MacroExpansion.__call = function(self, offset)
   end)
 
   return out:get()
+end
+
+
+-- * --------------------------------------------------------------------------
+
+MacroExpansion.__tostring = function(self)
+  -- Don't provide an offset to prevent tracking expansion
+  -- as this is called when this is being turned into a string in lua code.
+  return self()
 end
 
 -- * --------------------------------------------------------------------------

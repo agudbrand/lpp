@@ -155,6 +155,8 @@ struct Metaprogram
 {
   Lpp* lpp;
 
+  Metaprogram* prev;
+
   BufferPool buffers;
 
   SectionPool   sections;
@@ -189,7 +191,12 @@ struct Metaprogram
   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
-  b8   init(Lpp* lpp, io::IO* instream, Source* input, Source* output);
+  b8 init(
+      Lpp* lpp, 
+      io::IO* instream, 
+      Source* input, 
+      Source* output,
+      Metaprogram* prev);
   void deinit();
 
   b8 run();
@@ -210,8 +217,6 @@ struct Metaprogram
   template<typename... T>
   b8 errorAt(s32 loc, T... args);
 
-private: 
-
   // Indexes on the lua stack where important stuff is.
   // Eventually if lpp is ever 'stable' this should be 
   // removed in favor of using const vars set to where we know 
@@ -226,7 +231,8 @@ private:
     s32 lpp;
     s32 prev_context;
     s32 metaenv_table;
-    s32 macro_table;
+    s32 macro_invokers;
+    s32 macro_invocations;
     s32 lpp_runDocumentSectionCallbacks;
     s32 lpp_runFinalCallbacks;
   } I;

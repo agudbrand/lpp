@@ -49,6 +49,8 @@ struct Parser
 
   str getRaw();
 
+  void writeTokenSanitized();
+
   template<typename... T>
   void writeOut(T... args);
 };

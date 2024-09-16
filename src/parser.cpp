@@ -55,6 +55,25 @@ void Parser::deinit()
 
 /* ----------------------------------------------------------------------------
  */
+void Parser::writeTokenSanitized()
+{
+  // Write out the current token with its control characters 
+  // sanitized to lua's representation of them.
+  for (u8 c : getRaw())
+  {
+    if (iscntrl(c))
+      writeOut("\\"_str, c);
+    else if (c == '"')
+      writeOut("\\\""_str);
+    else if (c == '\\')
+      writeOut("\\\\"_str);
+    else 
+      writeOut((char)c);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 template<typename... T>
 void Parser::writeOut(T... args)
 {
@@ -103,20 +122,7 @@ b8 Parser::run()
         }
 
         writeOut("__metaenv.doc("_str, curt->loc, ",\""_str);
-        // sanitize the document text's control characters into lua's 
-        // represenatations of them
-        for (u8 c : getRaw())
-        {
-          if (iscntrl(c))
-            writeOut("\\"_str, c);
-          else if (c == '"')
-            writeOut("\\\""_str);
-          else if (c == '\\')
-            writeOut("\\\\"_str);
-          else 
-            writeOut((char)c);
-        }
-
+        writeTokenSanitized();
         writeOut("\")\n"_str);
         nextToken();
         break;
@@ -172,12 +178,23 @@ b8 Parser::run()
           for (;;)
           {
             locmap.push({.from = bytes_written, .to = curt->loc});
-            writeOut(',', 
-              "__metaenv.lpp.MacroPart.new(",
-              '"', source->name, '"', ',',
-              curt->loc,              ',',
-              curt->loc + curt->len,  ',',
-              '"', getRaw(), '"', ')');
+            // NOTE(sushi) used to use this MacroPart stuff here 
+            //             but finding that it makes working with macro
+            //             arguments too unintuitive. Later once we get to
+            //             needing to use the mappings these would provide
+            //             we should provide some sorta lpp.macro api whose
+            //             use makes it apparent that the macro arguments
+            //             are special types, not just strings.
+            // writeOut(',', 
+            //   "__metaenv.lpp.MacroPart.new(",
+            //   '"', source->name, '"', ',',
+            //   curt->loc,              ',',
+            //   curt->loc + curt->len,  ',',
+            //   '"');
+            writeOut(',', '"');
+            writeTokenSanitized();
+            // writeOut('"', ')');
+            writeOut('"');
             nextToken();
             if (not at(MacroArgumentTupleArg))
               break;

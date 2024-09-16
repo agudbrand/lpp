@@ -48,6 +48,8 @@ struct Lpp
 
   // True when we should run in lsp mode (--lsp).
   b8 lsp;
+  // Print lua metaprograms (--print-meta)
+  b8 print_meta;
 
   b8   init();
   void deinit();

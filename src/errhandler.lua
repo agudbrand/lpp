@@ -18,6 +18,7 @@ return function(errmsg)
         src = info.source,
         line = info.currentline,
         name = info.name,
+        func = info.func,
       })
     end
     fidx = fidx + 1
