@@ -184,7 +184,8 @@ struct Metaprogram
   //             pretty bad and could probably be lazy so that it only 
   //             happens *if* there's an error to begin with.
   struct InputLineMapping { s32 metaprogram; s32 input; };
-  Array<InputLineMapping> input_line_map;
+  typedef Array<InputLineMapping> InputLineMap;
+  InputLineMap input_line_map;
 
 
   /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=

@@ -4,6 +4,8 @@
 #include "iro/linemap.h"
 #include "iro/fs/file.h"
 
+#include "stdlib.h"
+
 namespace lpp
 {
 
@@ -231,6 +233,55 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
 }
 
 /* ----------------------------------------------------------------------------
+ *  Translates a lua error string to the original location in the input.
+ *  This is probably only going to be used for syntax errors that occur
+ *  when loading the metaprogram into lua.
+ *
+ *  This doesn't handle all line locations. Unfortunately in a case like 
+ *  missing an 'end' lua will report the start of the end in the message.
+ *  If we want to handle a case like this we would need to modify the 
+ *  message or make a new one which I don't want to get into rn.
+ *
+ *  TODO(sushi) handle this better.
+ */
+struct TranslatedError
+{
+  str filename;
+  u64 line;
+  str error;
+};
+
+TranslatedError translateLuaError(Metaprogram& mp, str error)
+{
+  TranslatedError te = {nil};
+
+  if (error.startsWith("[string"_str))
+  {
+    error = error.sub("[string "_str.len + 1);
+    te.filename = error.sub(0, error.findFirst('"'));
+    error = error.sub(te.filename.len + 3);
+    str num = error.sub(0, error.findFirst(':'));
+    u8 terminated[24];
+    if (!num.nullTerminate(terminated, 24))
+    {
+      ERROR(
+        "unable to null terminate lua error line number, buffer too small");
+      return {};
+    }
+    te.line = strtoull((char*)terminated, nullptr, 10);
+    te.line = mp.mapMetaprogramLineToInputLine(te.line);
+    te.error = error.sub(num.len + 2);
+  }
+  else
+  {
+    ERROR("unhandled lua error format: \n", error, "\n");
+    return {};
+  }
+
+  return te;
+}
+
+/* ----------------------------------------------------------------------------
  */
 b8 Metaprogram::run()
 {
@@ -278,23 +329,13 @@ b8 Metaprogram::run()
   if (lpp->print_meta)
     NOTICE(parsed_program.asStr(), "\n");
 
-#if LPP_DEBUG && 0
-  {
-    auto f = 
-      scoped(fs::File::from("temp/parsed"_str, 
-          fs::OpenFlag::Create 
-        | fs::OpenFlag::Write 
-        | fs::OpenFlag::Truncate));
-    f.write(parsed_program.asStr());
-  }
-#endif
-
   // TODO(sushi) do this better ok ^_^
   //
   // Cache off a mapping from lines in the generated file to those in 
   // the original input.
   Source temp;
   temp.init("temp"_str);
+  defer { temp.deinit(); };
   temp.writeCache(parsed_program.asStr());
   temp.cacheLineOffsets();
   for (auto& exp : parser.locmap)
@@ -307,6 +348,12 @@ b8 Metaprogram::run()
         .input = s32(to.line)
       });
   }
+  // push a eof line
+  input_line_map.push(
+      { 
+        .metaprogram = input_line_map.last()->metaprogram+1,
+        .input = input_line_map.last()->input+1
+      });
 
   // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 2
   
@@ -323,8 +370,10 @@ b8 Metaprogram::run()
   if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.bytes))
   {
     ERROR(parsed_program.asStr(), "\n");
-    // TODO(sushi) need to translate lines here
-    ERROR("failed to load metaprogram into lua\n", lua.tostring(), "\n");
+    auto te = translateLuaError(*this, lua.tostring());
+    ERROR(
+        "failed to load metaprogram into lua\n",
+        te.filename, ":", te.line, ": ", te.error, "\n");
     return false;
   }
   I.metaprogram = lua.gettop();

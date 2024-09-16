@@ -48,17 +48,17 @@ struct Source
   b8   init(str name);
   void deinit();
 
-  // writes to the cache and handles some state such as if 
-  // line offsets are calculated
+  // Writes to the cache and handles some state such as if 
+  // line offsets are calculated.
   b8 writeCache(Bytes slice);
 
-  // caches line offsets in the cached buffer
+  // Caches line offsets in the cached buffer.
   b8 cacheLineOffsets();
 
   str getStr(u64 offset, u64 length);
 
-  // translate a byte offset into this source to 
-  // a line and column
+  // Translate a byte offset into this source to 
+  // a line and column.
   Loc getLoc(u64 offset);
 };
 

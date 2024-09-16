@@ -1,11 +1,16 @@
 $ -- Not really a test file, moreso for me to mess with temp ideas
 $ local lpp = require "lpp"
 
-int apple() {}
+$$$
 
-@lpp.processFile "tests/imported.lpp"
+local test = function(a)
+  print(a,)
+end
+$$$
 
-#include "iro/containers/array.h"
+@test({
+  A, B, C
+})
 
 int main()
 {

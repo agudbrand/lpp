@@ -185,6 +185,9 @@ b8 Parser::run()
             //             we should provide some sorta lpp.macro api whose
             //             use makes it apparent that the macro arguments
             //             are special types, not just strings.
+            //             The primary problem is wanting to index tables
+            //             using macro arguments, since these are tables
+            //             it won't use __tostring.
             // writeOut(',', 
             //   "__metaenv.lpp.MacroPart.new(",
             //   '"', source->name, '"', ',',
