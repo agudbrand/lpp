@@ -307,7 +307,13 @@ b8 Lexer::run()
       advance();
       curt.macro_indent_loc = trailing_space_start;
       curt.macro_indent_len = trailing_space_len;
-      finishCurt(MacroSymbol);
+      Token::Kind macro_kind = MacroSymbol;
+      if (at('@'))
+      {
+        advance();
+        macro_kind = MacroSymbolImmediate;
+      }
+      finishCurt(macro_kind);
 
       skipWhitespace();
       initCurt();
@@ -374,7 +380,7 @@ b8 Lexer::run()
               // to suppress splitting the string by commas.
               if (brace_nesting == 0)
               {
-                finishCurt(MacroArgumentTupleArg);
+                finishCurt(MacroTupleArg);
                 reset_curt = true;
               }
               break;
@@ -398,7 +404,7 @@ b8 Lexer::run()
 
             if (done)
             {
-              finishCurt(MacroArgumentTupleArg);
+              finishCurt(MacroTupleArg);
               break;
             }
 
@@ -428,7 +434,7 @@ b8 Lexer::run()
           if (at('"'))
             break;
         }
-        finishCurt(MacroArgumentString);
+        finishCurt(MacroStringArg);
         advance();
         break;
       }

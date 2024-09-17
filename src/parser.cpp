@@ -160,58 +160,69 @@ b8 Parser::run()
         break;
 
       case MacroSymbol:
-        TRACE("encountered macro symbol\n");
-        locmap.push({.from = bytes_written, .to = curt->loc});
-        writeOut(
-          "__metaenv.macro("_str, curt->loc, ",\"", 
-          source->getStr(curt->macro_indent_loc, curt->macro_indent_len), 
-          "\",");
-
-        nextToken(); // identifier
-
-        locmap.push({.from = bytes_written, .to = curt->loc});
-        writeOut('"', getRaw(), "\",", getRaw());
-
-        nextToken();
-        if (at(MacroArgumentTupleArg))
+      case MacroSymbolImmediate:
         {
-          for (;;)
+          b8 is_immediate = curt->kind == MacroSymbolImmediate;
+          TRACE("encountered macro symbol\n");
+          locmap.push({.from = bytes_written, .to = curt->loc});
+
+          if (is_immediate)
+            writeOut("__metaenv.doc(", curt->loc, 
+                ",__metaenv.macro_immediate("_str);
+          else
+            writeOut("__metaenv.macro("_str);
+          writeOut(curt->loc, ",\"", 
+              source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
+              "\",");
+
+          nextToken(); // identifier
+
+          locmap.push({.from = bytes_written, .to = curt->loc});
+          writeOut('"', getRaw(), "\",", getRaw());
+
+          nextToken();
+          if (at(MacroTupleArg))
+          {
+            for (;;)
+            {
+              locmap.push({.from = bytes_written, .to = curt->loc});
+              // NOTE(sushi) used to use this MacroPart stuff here 
+              //             but finding that it makes working with macro
+              //             arguments too unintuitive. Later once we get to
+              //             needing to use the mappings these would provide
+              //             we should provide some sorta lpp.macro api whose
+              //             use makes it apparent that the macro arguments
+              //             are special types, not just strings.
+              //             The primary problem is wanting to index tables
+              //             using macro arguments, since these are tables
+              //             it won't use __tostring.
+              // writeOut(',', 
+              //   "__metaenv.lpp.MacroPart.new(",
+              //   '"', source->name, '"', ',',
+              //   curt->loc,              ',',
+              //   curt->loc + curt->len,  ',',
+              //   '"');
+              writeOut(',', '"');
+              writeTokenSanitized();
+              // writeOut('"', ')');
+              writeOut('"');
+              nextToken();
+              if (not at(MacroTupleArg))
+                break;
+              // writeOut(',');
+            }
+          }
+          else if (at(MacroStringArg))
           {
             locmap.push({.from = bytes_written, .to = curt->loc});
-            // NOTE(sushi) used to use this MacroPart stuff here 
-            //             but finding that it makes working with macro
-            //             arguments too unintuitive. Later once we get to
-            //             needing to use the mappings these would provide
-            //             we should provide some sorta lpp.macro api whose
-            //             use makes it apparent that the macro arguments
-            //             are special types, not just strings.
-            //             The primary problem is wanting to index tables
-            //             using macro arguments, since these are tables
-            //             it won't use __tostring.
-            // writeOut(',', 
-            //   "__metaenv.lpp.MacroPart.new(",
-            //   '"', source->name, '"', ',',
-            //   curt->loc,              ',',
-            //   curt->loc + curt->len,  ',',
-            //   '"');
-            writeOut(',', '"');
-            writeTokenSanitized();
-            // writeOut('"', ')');
-            writeOut('"');
+            writeOut(',', '"', getRaw(), '"');
             nextToken();
-            if (not at(MacroArgumentTupleArg))
-              break;
-            // writeOut(',');
           }
-        }
-        else if (at(MacroArgumentString))
-        {
-          locmap.push({.from = bytes_written, .to = curt->loc});
-          writeOut(',', '"', getRaw(), '"');
-          nextToken();
-        }
 
-        writeOut(")\n"_str);
+          if (is_immediate)
+            writeOut(')');
+          writeOut(")\n"_str);
+        }
         break;
     }
   }

@@ -49,6 +49,8 @@ local MacroExpansion,
 ---@field handle userdata 
 --- Handle to the currently executing metaprogram's 'context'.
 ---@field context userdata
+--- Reference to the currently executing metaprogram's environment.
+---@field metaenv table
 --- List of callbacks to be executed in reverse order on each Document 
 --- section as we reach them.
 ---@field doc_callbacks List
@@ -66,9 +68,6 @@ lpp.dependencies = List{}
 lpp.include_dirs = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
-
--- Stack of metaenvs so that they may read each other.
-lpp.metaenvs = List{}
 
 -- * --------------------------------------------------------------------------
 
@@ -127,14 +126,6 @@ end
 
 -- * --------------------------------------------------------------------------
 
-local lua_error = error
-error = function(msg)
-  if type(msg) == "table" and msg.handled then 
-    lua_error()
-  end
-  lua_error(msg, 0)
-end
-
 -- Patch lua's print with one that prefixes the message with the srcloc of the 
 -- print as print is only meant to be used for debug purposes and losing where 
 -- they are is quite easy.
@@ -179,7 +170,12 @@ end
 ---@param path string
 ---@return string
 lpp.processFile = function(path)
-  return lua__processFile(lpp.handle, path)
+  local result = lua__processFile(lpp.handle, path)
+  if not result then
+    log:fatal("failed to process path ", path, "\n")
+    os.exit(1)
+  end
+  return result
 end
 
 -- * --------------------------------------------------------------------------
@@ -456,7 +452,6 @@ MacroExpansion.__call = function(self, offset)
   return out:get()
 end
 
-
 -- * --------------------------------------------------------------------------
 
 MacroExpansion.__tostring = function(self)
@@ -527,6 +522,15 @@ end
 
 --- A part of a MacroExpansion that contains the text to expand and information 
 --- that can be used to determine where that text comes from.
+---
+--- Originally these were implicitly wrapping arguments passed to macros, 
+--- but that didn't work as well as I wanted. We're not able to fully make them
+--- masquarade as normal strings, primarily in the case of trying to use 
+--- a macro argument to index a table. I would like to return to this as its
+--- very useful for mapping from the output to macro arguments properly 
+--- but currently I don't use those mappings for anything. Once we get to 
+--- translating compiler errors and fixing debug info we should revisit this
+--- in some way that isn't implicit.
 ---
 ---@class MacroPart
 --- A string naming where this part comes from. This may be any name, but 

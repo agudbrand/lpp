@@ -3,16 +3,24 @@ $ local lpp = require "lpp"
 
 $$$
 
+local bad = function()
+  return 1 + nil
+end
+
 local test = function(a)
-  print(a,)
+$$$
+  hello $(a)
+  @bad
+$$$
 end
 $$$
-
-@test({
-  A, B, C
-})
 
 int main()
 {
 }
 
+$ for i=1,3 do
+  @@test "goodbye"
+$ end
+
+bah bah bah

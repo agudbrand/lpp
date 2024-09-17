@@ -32,10 +32,11 @@ struct Token
     LuaInline,
     LuaBlock,
 
-    MacroSymbol,
+    MacroSymbol, // @
+    MacroSymbolImmediate, // @!
     MacroIdentifier,
-    MacroArgumentTupleArg, // (a, b, c, ...)
-    MacroArgumentString,   // "..."
+    MacroTupleArg, // (a, b, c, ...)
+    MacroStringArg,   // "..."
 
     // Any text that lpp is preprocessing. Eg. if we 
     // are preprocessing a C file, this is C code.
@@ -148,8 +149,8 @@ static s64 format(io::IO* io, lpp::Token::Kind& kind)
   c(LuaBlock);
   c(MacroSymbol);
   c(MacroIdentifier);
-  c(MacroArgumentTupleArg);
-  c(MacroArgumentString);
+  c(MacroTupleArg);
+  c(MacroStringArg);
   c(Document);
 #undef c
     default: assert(!"invalid token kind"); return 0;

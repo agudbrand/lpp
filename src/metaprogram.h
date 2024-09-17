@@ -229,8 +229,10 @@ struct Metaprogram
     s32 errhandler;
     s32 metaprogram;
     s32 metaenv;
+    s32 metaenv__metaenv; // :P
     s32 lpp;
     s32 prev_context;
+    s32 prev_metaenv;
     s32 metaenv_table;
     s32 macro_invokers;
     s32 macro_invocations;

@@ -197,7 +197,7 @@ void Metaprogram::popScope()
  */
 Scope* Metaprogram::getCurrentScope()
 {
-  return &scope_stack.head();
+  return (scope_stack.isEmpty()? nullptr : &scope_stack.head());
 }
 
 /* ----------------------------------------------------------------------------
@@ -378,6 +378,46 @@ b8 Metaprogram::run()
   }
   I.metaprogram = lua.gettop();
 
+  // Get the lpp module and set the proper metaprogram context. 
+  TRACE("setting lpp module context and metaenv\n");
+  if (!lua.require("lpp"_str))
+  {
+    ERROR("failed to get lpp module for setting metaprogram context\n");
+    return false;
+  }
+  I.lpp = lua.gettop();
+
+  // Save the old context.
+  lua.pushstring("context"_str);
+  lua.gettable(I.lpp);
+  I.prev_context = lua.gettop();
+
+  // Set the new context.
+  lua.pushstring("context"_str);
+  lua.pushlightuserdata(this);
+  lua.settable(I.lpp);
+
+  // Ensure the context is restored.
+  defer 
+  {
+    lua.pushstring("context"_str);
+    lua.pushvalue(I.prev_context);
+    lua.settable(I.lpp);
+  };
+
+  // Save the old metaenv.
+  lua.pushstring("metaenv"_str);
+  lua.gettable(I.lpp);
+  I.prev_metaenv = lua.gettop();
+
+  // Ensure the metaenv is restored.
+  defer
+  {
+    lua.pushstring("metaenv"_str);
+    lua.pushvalue(I.prev_metaenv);
+    lua.settable(I.lpp);
+  };
+
   // Get the metaenvironment construction function and call it to 
   // make a new env.
   TRACE("constructing metaenvironment\n");
@@ -387,6 +427,7 @@ b8 Metaprogram::run()
     return false;
   }
 
+  // Call the construction function with this Metaprogram.
   lua.pushlightuserdata(this);
   if (!lua.pcall(1, 1))
   {
@@ -395,6 +436,46 @@ b8 Metaprogram::run()
     return false;
   }
   I.metaenv = lua.gettop();
+
+
+  // Get the ACTUAL metaenvironment table.
+  lua.pushstring("__metaenv"_str);
+  lua.gettable(I.metaenv);
+  I.metaenv__metaenv = lua.gettop();
+
+  // Get and set the new metaenv on lpp.
+  lua.pushstring("metaenv"_str);
+  lua.pushvalue(I.metaenv__metaenv);
+  lua.settable(I.lpp);
+
+  defer
+  {
+    // Mark the metaenvironment as having exited when we're done.
+    // This helps prevent using metaenvironments from other lpp files as this 
+    // is not currently supported. This can occur when two lpp files 
+    // require the same lua module and one patches in a function that 
+    // uses doc, val, or macro functions in its metaprogram then the other
+    // calls that function. The metaenvironment/program at this point is
+    // no longer valid and stuff like erroring and placing sections breaks.
+    // In order to support this we would probably have to move back to 
+    // using a single metaenvironment again which introduces some 
+    // complications. Each metaenvironment stores a reference to the 
+    // metaprogram that created it and so when one of its doc, val, or macro
+    // functions is called in this way it will attempt to perform the logic
+    // on the metaprogram that no longer exists. This can be fixed in some 
+    // way but I don't feel a need to yet.
+    // This might also break if the metaenv is garbage collected by lua.
+    // Idk yet if it will be but we'll see :3.
+    // Ideally this SHOULD be supported but I'm putting it off for now 
+    // until I have an actual use case for it. The (currently apparent)
+    // difficulty in getting this to happen also makes it not critical 
+    // to implement right away.
+    // When we do, the metaenv.lua functions should be designed to use whatever
+    // metaprogram is active (I hope its that simple).
+    lua.pushstring("exited"_str);
+    lua.pushboolean(true);
+    lua.settable(I.metaenv__metaenv);
+  };
 
   // NOTE(sushi) I used to do a thing here where the global environment of the 
   //             previous metaenvironment (if any, as in the case of processing 
@@ -406,43 +487,6 @@ b8 Metaprogram::run()
   //             too much of a bother then maybe I'll return to it another day.
   //             If I do, it should probably be implemented as an option
   //             of lpp.processFile().
-
-  // Get the lpp module and set the proper metaprogram context. 
-  TRACE("setting lpp module context\n");
-  if (!lua.require("lpp"_str))
-  {
-    ERROR("failed to get lpp module for setting metaprogram context\n");
-    return false;
-  }
-  I.lpp = lua.gettop();
-
-  // Push old context into lpp's context list.
-  // TODO(sushi) clean up restoring context logic since we do this now.
-  lua.pushstring("metaenvs"_str);
-  lua.gettable(I.lpp);
-  const s32 I_metaenvs = lua.gettop();
-  lua.pushstring("__metaenv"_str);
-  lua.gettable(I.metaenv);
-  const s32 I_metaenv__metaenv = lua.gettop();
-  lua.tableInsert(I_metaenvs, I_metaenv__metaenv);
-
-  // Save the old context.
-  lua.pushstring("context"_str);
-  lua.gettable(I.lpp);
-  I.prev_context = lua.gettop();
-
-  // Ensure the context is restored.
-  defer 
-  {
-    lua.pushstring("context"_str);
-    lua.pushvalue(I.prev_context);
-    lua.settable(I.lpp);
-  };
-
-  // Set the new context.
-  lua.pushstring("context"_str);
-  lua.pushlightuserdata(this);
-  lua.settable(I.lpp);
 
   // Finally set the metaenvironment of the metacode and call it.
   TRACE("setting environment of metaprogram\n");
@@ -776,6 +820,7 @@ SectionNode* metaprogramGetTopMacroInvocation(Metaprogram* mp)
 LPP_LUAJIT_FFI_FUNC
 Metaprogram* metaprogramGetPrev(Metaprogram* mp)
 {
+  assert(mp);
   return mp->prev; 
 }
 
@@ -784,6 +829,7 @@ Metaprogram* metaprogramGetPrev(Metaprogram* mp)
 LPP_LUAJIT_FFI_FUNC
 Scope* metaprogramGetCurrentScope(Metaprogram* mp)
 {
+  assert(mp);
   return mp->getCurrentScope();
 }
 
@@ -792,6 +838,7 @@ Scope* metaprogramGetCurrentScope(Metaprogram* mp)
 LPP_LUAJIT_FFI_FUNC
 Scope* scopeGetPrev(Scope* scope)
 {
+  assert(scope);
   return scope->prev;
 }
 
@@ -800,6 +847,7 @@ Scope* scopeGetPrev(Scope* scope)
 LPP_LUAJIT_FFI_FUNC
 u64 scopeGetInvokingMacroIdx(Scope* scope)
 {
+  assert(scope);
   return (scope->macro_invocation? scope->macro_invocation->macro_idx : 0);
 }
 
