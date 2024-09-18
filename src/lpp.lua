@@ -252,6 +252,22 @@ lpp.consumeCurrentScope = function()
   return strToLua(C.metaprogramConsumeCurrentScopeString(lpp.context))
 end
 
+-- * --------------------------------------------------------------------------
+
+--- Translate an offset into the current input file to a line and column.
+---
+---@param offset number
+lpp.getLineAndColumnFromOffset = function(offset)
+  local lac = C.metaprogramMapInputOffsetToLineAndColumn(lpp.context, offset)
+  return tonumber(lac.line), tonumber(lac.column)
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Get the offset into the input file that the macro arg at 'idx' starts.
+lpp.getMacroArgOffset = function(idx)
+  return lpp.metaenv.current_macro_arg_offsets[idx]
+end
 
 -- * ==========================================================================
 -- *   Section
@@ -360,7 +376,27 @@ end
 ---@param len number
 ---@return boolean
 Section.consumeFromBeginning = function(self, len)
-  return 0 ~= C.sectionConsumeFromBeginning(self.handle , len)
+  return 0 ~= C.sectionConsumeFromBeginning(self.handle, len)
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Get the offset into the input file where this section starts.
+---
+---@return number
+Section.getStartOffset = function(self)
+  return tonumber(C.sectionGetStartOffset(self.handle))
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Get the offset into the input file where the macro arg at 'idx' starts.
+---
+---@param idx number
+---@return number
+Section.getStartOffsetOfMacroArg = function(self, idx)
+  return tonumber(
+    C.sectionGetStartOffsetOfMacroArg(lpp.context, self.handle, idx))
 end
 
 -- * ==========================================================================
@@ -532,9 +568,18 @@ end
 --- translating compiler errors and fixing debug info we should revisit this
 --- in some way that isn't implicit.
 ---
+--- OK these are now being used again but only to report where macro arguments
+--- start to the metaenvironment so that the user can get this information.
+--- For example, ECS uses this in ui schema parsing to give proper error
+--- locations.
+---
 ---@class MacroPart
 --- A string naming where this part comes from. This may be any name, but 
 --- ideally it is a path relative to the file the macro is being invoked in.
+-- TODO(sushi) its very wasteful to make an entire string for each macro 
+--             part when they will all be the same. Once we get back to 
+--             using these for their original purpose add a way to get this
+--             name to the lpp or section api instead.
 ---@field source string 
 --- The byte offset into 'source' where this part begins.
 ---@field start number

@@ -83,5 +83,17 @@ ffi.cdef
   Scope* metaprogramGetCurrentScope(Metaprogram* mp);
   Scope* scopeGetPrev(Scope* scope);
   u64 scopeGetInvokingMacroIdx(Scope* scope);
+
+  u64 sectionGetStartOffset(SectionNode* section);
+
+  typedef struct
+  {
+    u64 line;
+    u64 column;
+  } LineAndColumn;
+
+  LineAndColumn metaprogramMapInputOffsetToLineAndColumn(
+    Metaprogram* mp, 
+    u64 offset);
 ]]
 

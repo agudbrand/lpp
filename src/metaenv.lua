@@ -41,6 +41,7 @@ return function(ctx)
   menv.ctx = ctx
   menv.macro_invokers = {}
   menv.macro_invocations = {}
+  menv.current_macro_arg_offsets = nil
 
   menv.exited = false
 
@@ -130,6 +131,8 @@ return function(ctx)
       local info = 
         miter.macro_invocations[tonumber(C.scopeGetInvokingMacroIdx(scope))]
 
+      if not info then break end
+
       import_lines:pushFront(getProperInfoString(info, mp))
 
       miter = miter.prev
@@ -196,12 +199,22 @@ return function(ctx)
     local invocation = debug.getinfo(2)
     table.insert(menv.macro_invocations, invocation)
 
-    local args = {...}
     if not macro then
       printMacroInvocationCallStack()
       log:error("macro with name '"..name.."' does not exist\n")
       error({handled=true})
     end
+
+    local args = List{...}
+
+    -- Extract the location information from the passed MacroParts and
+    -- replace each arg with its actual string.
+    -- This probably sucks performance-wise but whatever.
+    local arg_offsets = {}
+    args = args:map(function(arg)
+      table.insert(arg_offsets, arg.start)
+      return arg.text
+    end).arr
 
     local invoker
     local errhandler = function(err)
@@ -259,6 +272,9 @@ return function(ctx)
     end
 
     invoker = function()
+      local prev_macro_arg_offsets = menv.current_macro_arg_offsets
+      menv.current_macro_arg_offsets = arg_offsets
+
       local wrapper = function() -- uuuugh
         return macro(unpack(args))
       end
@@ -269,6 +285,8 @@ return function(ctx)
           log:fatal("error in error handler:\n", result[2], "\n")
         end
       end)}
+
+      menv.current_macro_arg_offsets = prev_macro_arg_offsets
 
       if not result[1] then
         os.exit(1)
@@ -308,12 +326,18 @@ return function(ctx)
 
     local invocation = debug.getinfo(2)
 
-    local args = {...}
     if not macro then
       printMacroInvocationCallStack()
       log:error("macro with name '"..name.."' does not exist\n")
       error({handled=true})
     end
+
+    local args = List{...}
+    local arg_offsets = {}
+    args = args:map(function(arg)
+      table.insert(arg_offsets, arg.start)
+      return arg.text
+    end).arr
 
     local errhandler = function(err)
       resolveImportStackTrace():each(function(line)
@@ -339,6 +363,9 @@ return function(ctx)
       log:error("  error occured in invocation:\n", err, "\n")
     end
 
+    local prev_macro_arg_offsets = menv.current_macro_arg_offsets
+    menv.current_macro_arg_offsets = arg_offsets
+
     local result = {xpcall(function()
       return macro(unpack(args))
     end, function(err)
@@ -347,6 +374,8 @@ return function(ctx)
         log:fatal("error in error handler:\n", result[2], "\n")
       end
     end)}
+
+    menv.current_macro_arg_offsets = prev_macro_arg_offsets
 
     if not result[1] then
       error({handled=true})

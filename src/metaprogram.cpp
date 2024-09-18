@@ -308,7 +308,7 @@ b8 Metaprogram::run()
     return false;
   defer { parsed_program.close(); };
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 1
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 1
   
   DEBUG("phase 1\n");
 
@@ -355,7 +355,7 @@ b8 Metaprogram::run()
         .input = input_line_map.last()->input+1
       });
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 2
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 2
   
   DEBUG("phase 2\n");
 
@@ -505,7 +505,7 @@ b8 Metaprogram::run()
     return false;
   }
 
-  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~= Phase 3
+  // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 3
   
   DEBUG("phase 3\n");
 
@@ -704,6 +704,19 @@ using namespace lpp;
 
 extern "C"
 {
+/* IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT !!!!!!
+ *
+ *
+ *
+ * IF you CHANGE or ADD STRUCTURES here you MUST make sure that the proper 
+ * stuff is UPDATED in cdefs.lua!!!! Giving luajit an incorrect structure def
+ * is a REALLY good way to cause runtime errors that are HARD, TOUGH, and 
+ * might I even say DIFFICULT to figure out!
+ *
+ *
+ *
+ * IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT IMPORTANT !!!!!!
+ */
 
 // Forward decls, as needed.
 b8 sectionIsDocument(SectionNode* section);
@@ -785,6 +798,28 @@ LPP_LUAJIT_FFI_FUNC
 s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line)
 {
   return mp->mapMetaprogramLineToInputLine(line);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+struct LineAndColumn
+{
+  u64 line;
+  u64 column;
+};
+
+LPP_LUAJIT_FFI_FUNC
+LineAndColumn metaprogramMapInputOffsetToLineAndColumn(
+    Metaprogram* mp, 
+    u64 offset)
+{
+  assert(mp);
+  assert(offset < mp->input->cache.len);
+  LineAndColumn lac;
+  Source::Loc loc = mp->input->getLoc(offset);
+  lac.line = loc.line;
+  lac.column = loc.column;
+  return lac;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1002,6 +1037,16 @@ b8 sectionConsumeFromBeginning(SectionNode* section, u64 len)
 {
   assert(sectionIsDocument(section));
   return section->data->consumeFromBeginning(len);
+}
+
+/* ----------------------------------------------------------------------------
+ *  Get the offset into the input file where this section starts.
+ */
+LPP_LUAJIT_FFI_FUNC
+u64 sectionGetStartOffset(SectionNode* section)
+{
+  assert(section);
+  return section->data->start_offset;
 }
 
 }
