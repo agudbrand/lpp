@@ -108,6 +108,9 @@ b8 Parser::run()
         break;
 
       case Document:
+        // TODO(sushi) consider just using offsets into the input file 
+        //             here instead of a whole lua string.
+
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
         {
@@ -196,26 +199,39 @@ b8 Parser::run()
               //             The primary problem is wanting to index tables
               //             using macro arguments, since these are tables
               //             it won't use __tostring.
-              // writeOut(',', 
-              //   "__metaenv.lpp.MacroPart.new(",
-              //   '"', source->name, '"', ',',
-              //   curt->loc,              ',',
-              //   curt->loc + curt->len,  ',',
-              //   '"');
-              writeOut(',', '"');
+              // NOTE(sushi) these are now being used again to report to the
+              //             metaenvironment where macro arguments start
+              //             so that the user can get this information.
+              //             This information could probably be stored better
+              //             in some C data, but I would want to split up
+              //             Document and Macros into their own types
+              //             distinct from Section at that point and I 
+              //             dont wannnnnaa do that since this is already 
+              //             here :). 
+              writeOut(',', 
+                "__metaenv.lpp.MacroPart.new(",
+                '"', source->name, '"', ',',
+                curt->loc,              ',',
+                curt->loc + curt->len,  ',',
+                '"');
               writeTokenSanitized();
-              // writeOut('"', ')');
-              writeOut('"');
+              writeOut('"', ')');
               nextToken();
               if (not at(MacroTupleArg))
                 break;
-              // writeOut(',');
             }
           }
           else if (at(MacroStringArg))
           {
             locmap.push({.from = bytes_written, .to = curt->loc});
-            writeOut(',', '"', getRaw(), '"');
+            writeOut(',',
+                "__metaenv.lpp.MacroPart.new(",
+                '"', source->name, '"', ',',
+                curt->loc,              ',',
+                curt->loc + curt->len,  ',',
+                '"');
+            writeTokenSanitized();
+            writeOut('"', ')');
             nextToken();
           }
 
