@@ -181,7 +181,16 @@ b8 Parser::run()
           nextToken(); // identifier
 
           locmap.push({.from = bytes_written, .to = curt->loc});
-          writeOut('"', getRaw(), "\",", getRaw());
+          writeOut('"', getRaw(), "\",");
+
+          if (curt->kind == MacroMethod)
+          {
+            str mobj = getRaw().sub(0, curt->method_colon_offset);
+            str mfun = getRaw().sub(curt->method_colon_offset+1, curt->len);
+            writeOut("true,", mobj, '.', mfun, ',', mobj);
+          }
+          else
+            writeOut("false,", getRaw());
 
           nextToken();
           if (at(MacroTupleArg))

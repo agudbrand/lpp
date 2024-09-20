@@ -46,6 +46,9 @@ struct Lpp
   b8  generate_depfile;
   str depfile_output;
 
+  b8 output_metafile;
+  str metafile_output;
+
   // True when we should run in lsp mode (--lsp).
   b8 lsp;
   // Print lua metaprograms (--print-meta)

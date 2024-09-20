@@ -329,6 +329,22 @@ b8 Metaprogram::run()
   if (lpp->print_meta)
     NOTICE(parsed_program.asStr(), "\n");
 
+  // NOTE(sushi) we only want to output the main lpp file's metafile
+  if (lpp->output_metafile && prev == nullptr)
+  {
+    auto file = 
+      fs::File::from(lpp->metafile_output, 
+          fs::OpenFlag::Write 
+        | fs::OpenFlag::Create
+        | fs::OpenFlag::Truncate);
+    if (isnil(file))
+      return FATAL(
+          "could not open file at path '", lpp->metafile_output, " for "
+          "metafile\n");
+    file.write(parsed_program.asStr());
+    file.close();
+  }
+
   // TODO(sushi) do this better ok ^_^
   //
   // Cache off a mapping from lines in the generated file to those in 
@@ -437,7 +453,6 @@ b8 Metaprogram::run()
   }
   I.metaenv = lua.gettop();
 
-
   // Get the ACTUAL metaenvironment table.
   lua.pushstring("__metaenv"_str);
   lua.gettable(I.metaenv);
@@ -541,6 +556,10 @@ b8 Metaprogram::run()
   lua.gettable(I.metaenv_table);
   I.macro_invocations = lua.gettop();
 
+  lua.pushstring("macro_names"_str);
+  lua.gettable(I.metaenv_table);
+  I.macro_names = lua.gettop();
+
   TRACE("processing global scope\n");
 
   if (!processScopeSections(getCurrentScope()))
@@ -589,6 +608,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
     {
     case Document:
       {
+        TRACE("in ", input->name, ": ");
         TRACE("found Document section\n");
 
         lua.pushvalue(I.lpp_runDocumentSectionCallbacks);
@@ -602,6 +622,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
 
     case Macro:
       {
+        TRACE("in ", input->name, ": ");
         TRACE("found Macro section\n");
         SectionList::Node* save = current_section;
         defer { current_section = save; };

@@ -236,6 +236,7 @@ struct Metaprogram
     s32 metaenv_table;
     s32 macro_invokers;
     s32 macro_invocations;
+    s32 macro_names;
     s32 lpp_runDocumentSectionCallbacks;
     s32 lpp_runFinalCallbacks;
   } I;

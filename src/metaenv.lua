@@ -42,6 +42,7 @@ return function(ctx)
   menv.macro_invokers = {}
   menv.macro_invocations = {}
   menv.current_macro_arg_offsets = nil
+  menv.macro_names = {}
 
   menv.exited = false
 
@@ -191,7 +192,7 @@ return function(ctx)
       end)
   end
 
-  menv.macro = function(start, indent, name, macro, ...)
+  menv.macro = function(start, indent, name, is_method, macro, ...)
     assertNotExited "macro"
     -- capture where this macro was invoked in phase 1
     local invoke_capture, pos = stackcapture(1)
@@ -212,8 +213,14 @@ return function(ctx)
     -- This probably sucks performance-wise but whatever.
     local arg_offsets = {}
     args = args:map(function(arg)
-      table.insert(arg_offsets, arg.start)
-      return arg.text
+      -- Skip the first arg on methods bc they will not be a macro part.
+      if not is_method then
+        table.insert(arg_offsets, arg.start)
+        return arg.text
+      else
+        is_method = false
+        return arg
+      end
     end).arr
 
     local invoker
@@ -275,16 +282,13 @@ return function(ctx)
       local prev_macro_arg_offsets = menv.current_macro_arg_offsets
       menv.current_macro_arg_offsets = arg_offsets
 
-      local wrapper = function() -- uuuugh
-        return macro(unpack(args))
-      end
-      local result = {xpcall(wrapper, function(err)
+      local result = {xpcall(macro, function(err)
         local result = {pcall(errhandler, err)}
 
         if not result[1] then
           log:fatal("error in error handler:\n", result[2], "\n")
         end
-      end)}
+      end, unpack(args))}
 
       menv.current_macro_arg_offsets = prev_macro_arg_offsets
 
@@ -311,6 +315,7 @@ return function(ctx)
     end
 
     table.insert(menv.macro_invokers, invoker)
+    table.insert(menv.macro_names, name)
     C.metaprogramAddMacroSection(
       ctx, 
       makeStr(indent), 
@@ -318,7 +323,7 @@ return function(ctx)
       #menv.macro_invokers)
   end
 
-  menv.macro_immediate = function(start, indent, name, macro, ...)
+  menv.macro_immediate = function(start, indent, name, is_method, macro, ...)
     assertNotExited "macro_immediate"
     -- TODO(sushi) replace this with the better error reporting.
     -- capture where this macro was invoked in phase 1
@@ -335,8 +340,14 @@ return function(ctx)
     local args = List{...}
     local arg_offsets = {}
     args = args:map(function(arg)
-      table.insert(arg_offsets, arg.start)
-      return arg.text
+      -- Skip the first arg on methods bc they will not be a macro part.
+      if not is_method then
+        table.insert(arg_offsets, arg.start)
+        return arg.text
+      else
+        is_method = false
+        return arg
+      end
     end).arr
 
     local errhandler = function(err)

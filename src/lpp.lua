@@ -641,4 +641,9 @@ MacroPart.__concat = function(lhs, rhs)
   end
 end
 
+-- so fucking desparate rn
+lpp.debugBreak = function()
+  lua__debugBreak()
+end
+
 return lpp

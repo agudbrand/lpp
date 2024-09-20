@@ -5,6 +5,7 @@
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
 #include "iro/argiter.h"
+#include "iro/platform.h"
 
 // Disabled for now since im giving up working on this and it 
 // actually causes clang to crash when compiling sometimes lol.
@@ -24,6 +25,7 @@ extern "C"
 
 int lua__processFile(lua_State* L);
 int lua__getFileFullPathIfExists(lua_State* L);
+int lua__debugBreak(lua_State* L);
 }
 
 namespace lpp
@@ -71,6 +73,7 @@ b8 Lpp::init()
 
   addGlobalCFunc(lua__processFile);
   addGlobalCFunc(lua__getFileFullPathIfExists);
+  addGlobalCFunc(lua__debugBreak);
 
 #undef addGlobalCFunc
 
@@ -353,6 +356,14 @@ b8 Lpp::processArgv(int argc, const char** argv)
       logger.verbosity = Logger::Verbosity::Trace;
       break;
 
+    case "om"_hashed:
+      iter.next();
+      if (isnil(iter.current))
+        return FATAL("expected a path to output metafile to");
+      output_metafile = true;
+      metafile_output = iter.current;
+      break;
+
     default:
       passthroughToLua();
     }
@@ -509,6 +520,14 @@ int lua__getFileFullPathIfExists(lua_State* L)
     lua.pushstring(path.buffer.asStr());
     return 1;
   }
+  return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__debugBreak(lua_State* L)
+{
+  platform::debugBreak();
   return 0;
 }
 

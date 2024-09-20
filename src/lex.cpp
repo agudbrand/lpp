@@ -1,6 +1,7 @@
 #include "lex.h"
 
 #include "iro/logger.h"
+#include "iro/platform.h"
 
 #include "ctype.h"
 #include "assert.h"
@@ -18,16 +19,20 @@ u32 Lexer::current() { return current_codepoint.codepoint; }
 b8 Lexer::at(u8 c) { return current() == c; }
 b8 Lexer::eof()    { return at_end || at(0) || isnil(current_codepoint); }
 
-b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
-b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || 
-                                      isdigit(current()); }
+static b8 isFirstIdentifierChar(u32 c) { return isalpha(c) || c == '_'; }
+static b8 isIdentifierChar(u32 c) { return isFirstIdentifierChar(c) || 
+                                           isdigit(c);  }
+
+b8 Lexer::atFirstIdentifierChar() { return isFirstIdentifierChar(current()); }
+b8 Lexer::atIdentifierChar() { return isIdentifierChar(current()); }
 
 /* ----------------------------------------------------------------------------
  *  Returns false if we've reached the end of the buffer.
  */
-b8 Lexer::readStreamIfNeeded()
+b8 Lexer::readStreamIfNeeded(b8 peek)
 {
-  if (current_offset == source->cache.len)
+  if (current_offset + (peek? current_codepoint.advance : 0) 
+      == source->cache.len)
   {
     TRACE("reading more bytes from stream... \n");
 
@@ -66,13 +71,24 @@ b8 Lexer::decodeCurrent()
 
 /* ----------------------------------------------------------------------------
  */
+u32 Lexer::peek()
+{
+  readStreamIfNeeded(true);
+  u64 offset = current_offset + current_codepoint.advance;
+  return utf8::decodeCharacter(
+      source->cache.buffer + offset,
+      source->cache.len - offset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void Lexer::advance(s32 n)
 {
   for (s32 i = 0; i < n; i++)
   {
     current_offset += current_codepoint.advance;
 
-    if (!readStreamIfNeeded())
+    if (!readStreamIfNeeded(false))
       return;
 
     if (!decodeCurrent())
@@ -148,7 +164,7 @@ b8 Lexer::init(io::IO* input_stream, Source* src)
   current_codepoint = nil;
 
   // prep buffer and current
-  readStreamIfNeeded();
+  readStreamIfNeeded(false);
   decodeCurrent();
 
   return true;
@@ -328,11 +344,44 @@ b8 Lexer::run()
       //             @lib.func()
       // TODO(sushi) this could maybe be made more advanced by allowing 
       //             arbitrary whitespace between the dots.
-      // TODO(sushi) support ':' here. Requires special logic in the parser.
-      while (atIdentifierChar() or at('.'))
+      b8 found_colon = false;
+      while (atIdentifierChar() or 
+             at('.') or 
+             at(':'))
+      {
+        if (at(':'))
+        {
+          // Peek ahead and see if an identifier character follows. If not 
+          // then assume this is some document syntax being used directly
+          // after a macro call.
+          if (isFirstIdentifierChar(peek()))
+            found_colon = true;
+          break;
+        }
         advance();
+      }
       
-      finishCurt(MacroIdentifier);
+      if (found_colon)
+      {
+        curt.method_colon_offset = current_offset - curt.loc;
+        advance();
+        while(atIdentifierChar())
+          advance();
+
+        if (at('.') or at(':'))
+          return errorHere("cannot use ':' or '.' after method syntax");
+      }
+      
+      if (found_colon)
+        finishCurt(MacroMethod);
+      else
+        finishCurt(MacroIdentifier);
+
+      if (curt.getRaw(source).hash() == "child.style"_hashed)
+      {
+        ERROR("child style\n");
+      }
+
       skipWhitespace();
 
       switch (current())

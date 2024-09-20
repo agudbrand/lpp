@@ -35,6 +35,7 @@ struct Token
     MacroSymbol, // @
     MacroSymbolImmediate, // @!
     MacroIdentifier,
+    MacroMethod, // a macro that uses : to call a method
     MacroTupleArg, // (a, b, c, ...)
     MacroStringArg,   // "..."
 
@@ -52,6 +53,8 @@ struct Token
 
   s32 macro_indent_loc = 0;
   s32 macro_indent_len = 0;
+
+  s32 method_colon_offset = 0;
 
   // retrieve the raw string this token encompasses from the given Source
   str getRaw(Source* src) { return src->getStr(loc, len); }
@@ -104,19 +107,21 @@ private:
 
   Token curt;
 
-  b8 readStreamIfNeeded();
+  b8 readStreamIfNeeded(b8 peek);
   b8 decodeCurrent();
 
   void initCurt();
   void finishCurt(Token::Kind kind, s32 len_offset = 0);
 
   u32 current();
+  u32 peek();
 
   b8 at(u8 c);
   b8 eof();
   b8 atFirstIdentifierChar();
   b8 atIdentifierChar();
   b8 atDigit();
+
 
   void advance(s32 n = 1);
   void skipWhitespace();
