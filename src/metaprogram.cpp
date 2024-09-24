@@ -157,7 +157,7 @@ b8 Scope::init(Scope* prev, io::Memory* buffer, Section* macro_invocation)
  */
 void Scope::deinit()
 {
-  sections.destroy();
+  sections.deinit();
   *this = {};
 }
 
