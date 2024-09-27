@@ -50,7 +50,7 @@ b8 Source::cacheLineOffsets()
   str s = cache.asStr();
   for (s64 i = 0; i < s.len; i++)
   {
-    if (s.bytes[i] == '\n')
+    if (s.ptr[i] == '\n')
       line_offsets.push(i+1);
   }
 
@@ -62,7 +62,14 @@ b8 Source::cacheLineOffsets()
  */
 str Source::getStr(u64 loc, u64 len)
 {
-  return {cache.buffer + loc, len};
+  return {cache.ptr + loc, len};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+str Source::getVirtualStr(u64 loc, u64 len)
+{
+  return {virtual_cache.ptr + loc, len};
 }
 
 /* ----------------------------------------------------------------------------
@@ -96,7 +103,7 @@ Source::Loc Source::getLoc(u64 loc)
   {
     if (offset >= loc)
       break;
-    utf8::Codepoint c = utf8::decodeCharacter(cache.buffer + offset, 4);
+    utf8::Codepoint c = utf8::decodeCharacter(cache.ptr + offset, 4);
     offset += c.advance;
     column += 1;
   }

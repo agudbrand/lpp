@@ -33,11 +33,12 @@ struct Token
     LuaBlock,
 
     MacroSymbol, // @
-    MacroSymbolImmediate, // @!
+    MacroSymbolImmediate, // @@
     MacroIdentifier,
     MacroMethod, // a macro that uses : to call a method
     MacroTupleArg, // (a, b, c, ...)
     MacroStringArg,   // "..."
+    MacroHereDocArg, // <-[term] * ([term]|->)
 
     // Any text that lpp is preprocessing. Eg. if we 
     // are preprocessing a C file, this is C code.
@@ -56,8 +57,14 @@ struct Token
 
   s32 method_colon_offset = 0;
 
-  // retrieve the raw string this token encompasses from the given Source
-  str getRaw(Source* src) { return src->getStr(loc, len); }
+  // Retrieve the raw string this token encompasses from the given Source
+  str getRaw(Source* src) 
+  { 
+    if (kind == Kind::MacroHereDocArg)
+      return src->getVirtualStr(loc, len);
+    else
+      return src->getStr(loc, len); 
+  }
 };
 
 }
@@ -121,7 +128,7 @@ private:
   b8 atFirstIdentifierChar();
   b8 atIdentifierChar();
   b8 atDigit();
-
+  b8 atWhitespace();
 
   void advance(s32 n = 1);
   void skipWhitespace();

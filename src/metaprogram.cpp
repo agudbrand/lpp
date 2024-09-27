@@ -74,10 +74,10 @@ b8 Section::insertString(u64 offset, str s)
   buffer->reserve(s.len);
 
   mem::move(
-    buffer->buffer + offset + s.len, 
-    buffer->buffer + offset, 
+    buffer->ptr + offset + s.len, 
+    buffer->ptr + offset, 
     (buffer->len - offset) + 1);
-  mem::copy(buffer->buffer + offset, s.bytes, s.len);
+  mem::copy(buffer->ptr + offset, s.ptr, s.len);
 
   buffer->commit(s.len);
 
@@ -99,7 +99,7 @@ b8 Section::consumeFromBeginning(u64 len)
 
   // idk man find a way to not move shit around later maybe with just a str ? 
   // idk we edit stuff too much and IDRC at the moment!!!
-  mem::move(buffer->buffer, buffer->buffer + len, buffer->len - len);
+  mem::move(buffer->ptr, buffer->ptr + len, buffer->len - len);
   buffer->len -= len;
   return true;
 }
@@ -118,6 +118,7 @@ b8 Metaprogram::init(
   this->input = input;
   this->output = output;
   this->prev = prev;
+  current_section = nullptr;
   if (!input_line_map.init()) return false;
   if (!buffers.init()) return false;
   if (!sections.init()) return false;
@@ -383,7 +384,7 @@ b8 Metaprogram::run()
   defer { popScope(); };
 
   TRACE("loading parsed program\n");
-  if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.bytes))
+  if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.ptr))
   {
     ERROR(parsed_program.asStr(), "\n");
     auto te = translateLuaError(*this, lua.tostring());
@@ -776,7 +777,7 @@ Cursor* metaprogramNewCursorAfterSection(Metaprogram* mp)
   cursor->section = cursor->creator;
   cursor->range = cursor->section->data->buffer->asStr();
   cursor->current_codepoint = 
-    utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
+    utf8::decodeCharacter(cursor->range.ptr, cursor->range.len);
   return cursor;
 }
 
@@ -925,7 +926,7 @@ b8 cursorNextChar(Cursor* cursor)
     return false;
 
   cursor->current_codepoint = 
-    utf8::decodeCharacter(cursor->range.bytes, cursor->range.len);
+    utf8::decodeCharacter(cursor->range.ptr, cursor->range.len);
   return true;
 }
 
@@ -946,15 +947,15 @@ b8 cursorInsertString(Cursor* cursor, str text)
   if (s->kind != Section::Kind::Document)
     return false;
   
-  assert(cursor->range.bytes >= s->buffer->buffer);
+  assert(cursor->range.ptr >= s->buffer->ptr);
 
-  u64 cursor_offset = cursor->range.bytes - s->buffer->buffer;
+  u64 cursor_offset = cursor->range.ptr - s->buffer->ptr;
 
   if (!s->insertString(cursor_offset, text))
     return false;
 
-  u8* new_pos = s->buffer->buffer + cursor_offset + text.len;
-  u64 new_len = (s->buffer->buffer + s->buffer->len) - new_pos;
+  u8* new_pos = s->buffer->ptr + cursor_offset + text.len;
+  u64 new_len = (s->buffer->ptr + s->buffer->len) - new_pos;
   cursor->range = {new_pos, new_len};
 
   return true;

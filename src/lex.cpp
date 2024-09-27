@@ -26,6 +26,8 @@ static b8 isIdentifierChar(u32 c) { return isFirstIdentifierChar(c) ||
 b8 Lexer::atFirstIdentifierChar() { return isFirstIdentifierChar(current()); }
 b8 Lexer::atIdentifierChar() { return isIdentifierChar(current()); }
 
+b8 Lexer::atWhitespace() { return 0 != isspace(current()); }
+
 /* ----------------------------------------------------------------------------
  *  Returns false if we've reached the end of the buffer.
  */
@@ -63,7 +65,7 @@ b8 Lexer::decodeCurrent()
 {
   current_codepoint = 
     utf8::decodeCharacter(
-      source->cache.buffer + current_offset, 
+      source->cache.ptr + current_offset, 
       source->cache.len - current_offset);
 
   return notnil(current_codepoint);
@@ -76,7 +78,7 @@ u32 Lexer::peek()
   readStreamIfNeeded(true);
   u64 offset = current_offset + current_codepoint.advance;
   return utf8::decodeCharacter(
-      source->cache.buffer + offset,
+      source->cache.ptr + offset,
       source->cache.len - offset);
 }
 
@@ -106,7 +108,6 @@ void Lexer::advance(s32 n)
       if (not isspace(current()))
         in_indentation = false;
     }
-
   }
 }
 
@@ -143,7 +144,7 @@ b8 Lexer::errorHere(T... args)
  */
 void Lexer::skipWhitespace()
 {
-  while (isspace(current()))
+  while (atWhitespace())
     advance();
 }
 
@@ -311,8 +312,8 @@ b8 Lexer::run()
         {
           Token* last = tokens.arr + tokens.len() - 2;
           str raw = last->getRaw(source);
-          while (isspace(raw.bytes[last->len-1]) && 
-                 raw.bytes[last->len-1] != '\n')
+          while (isspace(raw.ptr[last->len-1]) && 
+                 raw.ptr[last->len-1] != '\n')
             last->len -= 1;
         }
       }
@@ -427,7 +428,8 @@ b8 Lexer::run()
             case ',':
               // Tuple macro syntax allows using braces in an argument 
               // to suppress splitting the string by commas.
-              if (brace_nesting == 0)
+              if (brace_nesting == 0 &&
+                  paren_nesting == 1)
               {
                 finishCurt(MacroTupleArg);
                 reset_curt = true;
@@ -486,6 +488,55 @@ b8 Lexer::run()
         finishCurt(MacroStringArg);
         advance();
         break;
+
+      // Here-doc argument of syntax:
+      //   <-
+      //   ...
+      //   ->
+      // or, if a custom terminator is desired:
+      //   <-TERM
+      //   ...
+      //   TERM
+      // 
+      // Everything inside of the terminators is considered a single string
+      // with its indentation starting at the indentation of the final
+      // terminator.
+      // Eg.
+      //    <-
+      //      Hello
+      //        There
+      //      ->
+      // Would result in the string:
+      // Hello
+      //   There
+      //
+      // TODO(sushi) implement the virtual source cache and then this.
+      //
+      //case '<':
+      //  if (peek() != '-')
+      //    break;
+
+      //  advance(2);
+
+      //  // Check if a custom terminator is provided.
+      //  while (not at('\n') and atWhitespace())
+      //    advance();
+
+      //  {
+      //    if (at('\n'))
+      //    {
+      //      while (not at('-') and not eof())
+      //        advance();
+
+      //      if (eof())
+      //        return errorAt()
+      //    }
+      //    else
+      //    {
+      //      terminator.
+      //    }
+      //  }
+
       }
     }
     else

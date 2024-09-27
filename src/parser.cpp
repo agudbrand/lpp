@@ -119,7 +119,7 @@ b8 Parser::run()
           locmap.push({.from = bytes_written, .to = curt->loc});
           for (s32 i = 0; i < raw.len; ++i)
           {
-            if (i && raw.bytes[i-1] == '\n' && i != raw.len-1)
+            if (i && raw.ptr[i-1] == '\n' && i != raw.len-1)
               locmap.push({.from = bytes_written+i, .to = curt->loc+i});
           }
         }
@@ -138,7 +138,7 @@ b8 Parser::run()
           locmap.push({.from = bytes_written, .to = curt->loc});
           for (s32 i = 0; i < raw.len; ++i)
           {
-            if (i && raw.bytes[i-1] == '\n' && i != raw.len-1)
+            if (i && raw.ptr[i-1] == '\n' && i != raw.len-1)
               locmap.push({.from = bytes_written+i, .to = curt->loc+i});
           }
         }
@@ -197,7 +197,14 @@ b8 Parser::run()
           {
             for (;;)
             {
+              // TODO(sushi) it's possible we could lazily load macro arguments
+              //             from the input file instead of creating lua 
+              //             strings. I'm not really sure if this would be 
+              //             more efficient but for cases where macros never
+              //             get called it might be useful.
+
               locmap.push({.from = bytes_written, .to = curt->loc});
+
               // NOTE(sushi) used to use this MacroPart stuff here 
               //             but finding that it makes working with macro
               //             arguments too unintuitive. Later once we get to

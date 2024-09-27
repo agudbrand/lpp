@@ -43,17 +43,17 @@ b8 URI::parse(URI* uri, str s_)
     return false;
   }
 
-  uri->scheme.write({s.bytes, p.x});
+  uri->scheme.write({s.ptr, p.x});
 
-  s.bytes = s.bytes + p.x + 1;
+  s.ptr = s.ptr + p.x + 1;
 
   if (s.startsWith("//"_str))
   {
-    s.bytes += 2;
+    s.ptr += 2;
     if ((p = s.findFirst('/')))
     {
-      uri->authority.write(str{s.bytes, p.x});
-      s.bytes = s.bytes + p.x + 1;
+      uri->authority.write(str{s.ptr, p.x});
+      s.ptr = s.ptr + p.x + 1;
     }
     else
     {

@@ -28,6 +28,9 @@ struct Source
   //             content on demand so we dont store so much memory?
   io::Memory cache;
 
+  // Text created by the lexer.
+  io::Memory virtual_cache;
+
   // Byte offsets into this source where we find newlines.
   b8 line_offsets_calculated;
   Array<u64> line_offsets;
@@ -56,6 +59,7 @@ struct Source
   b8 cacheLineOffsets();
 
   str getStr(u64 offset, u64 length);
+  str getVirtualStr(u64 offset, u64 length);
 
   // Translate a byte offset into this source to 
   // a line and column.

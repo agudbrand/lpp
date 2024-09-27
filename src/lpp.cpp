@@ -375,9 +375,9 @@ b8 Lpp::processArgv(int argc, const char** argv)
   {
     str arg = iter.current;
     
-    if (arg.bytes[0] == '-')
+    if (arg.ptr[0] == '-')
     {
-      if (arg.bytes[1] == '-')
+      if (arg.ptr[1] == '-')
       {
         if (!handleDoubleDash())
           return false;
