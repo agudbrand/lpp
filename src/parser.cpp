@@ -49,6 +49,8 @@ b8 Parser::init(
  */
 void Parser::deinit()
 {
+  locmap.destroy();
+  tokens.destroy();
   lexer.deinit();
   *this = {};
 }

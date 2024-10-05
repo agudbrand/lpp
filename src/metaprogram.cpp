@@ -133,12 +133,16 @@ b8 Metaprogram::init(
 void Metaprogram::deinit()
 {
   input_line_map.destroy();
+  for (auto& section : sections)
+    section.deinit();
   sections.deinit();
   for (auto& scope : scope_stack)
     scope.deinit();
   scope_stack.deinit();
   cursors.deinit();
   expansions.deinit();
+  for (auto& buffer : buffers)
+    buffer.close();
   buffers.deinit();
   *this = {};
 }
@@ -191,7 +195,8 @@ Scope* Metaprogram::pushScope()
  */
 void Metaprogram::popScope()
 {
-  scope_stack.pop();
+  auto scope = scope_stack.pop();
+  scope.deinit();
 }
 
 /* ----------------------------------------------------------------------------
@@ -244,6 +249,7 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
  *  message or make a new one which I don't want to get into rn.
  *
  *  TODO(sushi) handle this better.
+ *  TODO(sushi) SmallArray might be useful here.
  */
 struct TranslatedError
 {
@@ -346,7 +352,7 @@ b8 Metaprogram::run()
     file.close();
   }
 
-  // TODO(sushi) do this better ok ^_^
+  // TODO(sushi) do this better okay? ^_^
   //
   // Cache off a mapping from lines in the generated file to those in 
   // the original input.

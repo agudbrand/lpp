@@ -450,6 +450,7 @@ int lua__processFile(lua_State* L)
   Lpp* lpp = lua.tolightuserdata<Lpp>(1);
   auto reqpath = lua.tostring(2);
   auto path = fs::Path::from(reqpath);
+  defer { path.destroy(); };
 
   if (!path.makeAbsolute())
   {
