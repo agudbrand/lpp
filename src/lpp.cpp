@@ -167,7 +167,7 @@ b8 Lpp::run()
     if (!lua.pcall(0, 1))
       return false;
     
-    str result = lua.tostring();
+    String result = lua.tostring();
 
     if (notnil(depfile_output))
     {
@@ -278,7 +278,7 @@ b8 Lpp::processArgv(int argc, const char** argv)
 
   auto handleDoubleDash = [=, &iter, this]() -> b8
   {
-    str arg = iter.current.sub(2);
+    String arg = iter.current.sub(2);
     switch (arg.hash())
     {
     case "lsp"_hashed:
@@ -297,7 +297,7 @@ b8 Lpp::processArgv(int argc, const char** argv)
 
   auto handleSingleDash = [=, &iter, this]() -> b8
   {
-    str arg = iter.current.sub(1);
+    String arg = iter.current.sub(1);
     switch(arg.hash())
     {
     case "o"_hashed:
@@ -373,7 +373,7 @@ b8 Lpp::processArgv(int argc, const char** argv)
 
   for (;notnil(iter.current); iter.next())
   {
-    str arg = iter.current;
+    String arg = iter.current;
     
     if (arg.ptr[0] == '-')
     {
@@ -406,7 +406,7 @@ b8 Lpp::processArgv(int argc, const char** argv)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lpp::processStream(str name, io::IO* instream, io::IO* outstream)
+b8 Lpp::processStream(String name, io::IO* instream, io::IO* outstream)
 {
   DEBUG("creating metaprogram from input stream '", name, "'\n");
 
@@ -494,7 +494,7 @@ int lua__processFile(lua_State* L)
 int lua__fileExists(lua_State* L)
 {
   auto lua = LuaState::fromExistingState(L);
-  str path = lua.tostring(1);
+  String path = lua.tostring(1);
   lua.pushboolean(
       fs::Path::exists(path) &&
       fs::Path::isRegularFile(path));

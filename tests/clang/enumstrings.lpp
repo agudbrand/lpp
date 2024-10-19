@@ -15,7 +15,7 @@ local enumStrings = function()
 
 	local elements = d:getEnumIter()
 
-	local buffer = "static const str "..d:name().."_strings[] = \n{"
+	local buffer = "static const String "..d:name().."_strings[] = \n{"
 
 	while true do
 		local element = elements:next()

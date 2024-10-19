@@ -311,7 +311,7 @@ b8 Lexer::run()
         if (tokens.len() != 0)
         {
           Token* last = tokens.arr + tokens.len() - 2;
-          str raw = last->getRaw(source);
+          String raw = last->getRaw(source);
           while (isspace(raw.ptr[last->len-1]) && 
                  raw.ptr[last->len-1] != '\n')
             last->len -= 1;

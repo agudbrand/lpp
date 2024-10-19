@@ -28,7 +28,7 @@ struct URI
 
   // parses the given string into a URI 
   //
-  static b8 parse(URI* uri, str s);
+  static b8 parse(URI* uri, String s);
 
   b8 encode();
   b8 decode();

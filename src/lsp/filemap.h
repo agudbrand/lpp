@@ -23,9 +23,9 @@ using namespace iro;
  */
 struct File
 {
-  str filename;
+  String filename;
   u64 hash; // of filename
-  str contents;
+  String contents;
 };
 
 /* --------------------------------------------------------------------------
@@ -65,7 +65,7 @@ struct FileMap
 
   /* --------------------------------------------------------------------------
    */
-  File* getOrCreateFile(str filename)
+  File* getOrCreateFile(String filename)
   {
     u64 hash = filename.hash();
     
@@ -86,12 +86,12 @@ struct FileMap
 
   /* --------------------------------------------------------------------------
    */
-  File* getFile(str filename)
+  File* getFile(String filename)
   {
     return map.find(filename.hash());
   }
 
-  b8 updateFileContents(File* file, str contents)
+  b8 updateFileContents(File* file, String contents)
   {
     assert(file);
 

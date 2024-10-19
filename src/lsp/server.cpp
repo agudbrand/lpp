@@ -59,14 +59,14 @@ static b8 processError(Args... args)
 
 /* ----------------------------------------------------------------------------
  */
-static str getFileNameFromURI(str uri)
+static String getFileNameFromURI(String uri)
 {
   return uri.sub("file:///"_str.len-1);
 }
 
 /* ----------------------------------------------------------------------------
  */
-static str tryGetStringMember(json::Object* o, str name)
+static String tryGetStringMember(json::Object* o, String name)
 {
   json::Value* v = o->findMember(name);
   if (!v)
@@ -78,7 +78,7 @@ static str tryGetStringMember(json::Object* o, str name)
 
 /* ----------------------------------------------------------------------------
  */
-static json::Object* tryGetObjectMember(json::Object* o, str name)
+static json::Object* tryGetObjectMember(json::Object* o, String name)
 {
   json::Value* v = o->findMember(name);
   if (!v)
@@ -98,7 +98,7 @@ enum class TokenType
 
 /* ----------------------------------------------------------------------------
  */
-str getTokenTypeName(TokenType t)
+String getTokenTypeName(TokenType t)
 {
   using enum TokenType;
   switch (t)
@@ -263,7 +263,7 @@ static b8 processRequest(
         " encountered in lsp request\n");
   }
   
-  str method = tryGetStringMember(request, "method"_str);
+  String method = tryGetStringMember(request, "method"_str);
   if (isnil(method))
     return processError("lsp request missing method\n");
 
@@ -426,7 +426,7 @@ static b8 processNotification(Server* server, json::Object* notification)
 {
   using namespace json;
 
-  str method = tryGetStringMember(notification, "method"_str);
+  String method = tryGetStringMember(notification, "method"_str);
   if (isnil(method))
     return processError("lsp request missing method\n");
 
@@ -453,7 +453,7 @@ static b8 processNotification(Server* server, json::Object* notification)
         return processError(
             "failed to deserialize textDocument/didOpen params\n");
       
-      str file = getFileNameFromURI(dop.textDocument.uri);
+      String file = getFileNameFromURI(dop.textDocument.uri);
 
       File* doc = server->open_files.getOrCreateFile(file);
       if (!doc)
@@ -483,7 +483,7 @@ static b8 processNotification(Server* server, json::Object* notification)
         return processError(
             "failed to deserialize textDocument/didChange params\n");
 
-      str file = getFileNameFromURI(dcp.textDocument.uri);
+      String file = getFileNameFromURI(dcp.textDocument.uri);
 
       File* doc = server->open_files.getFile(file);
       if (!doc)
@@ -533,7 +533,7 @@ b8 Server::loop()
       fs::stdin.read({cursor, 1});
       if (*cursor == ':')
       {
-        str fieldname = str::from(header_buffer,cursor);
+        String fieldname = String::from(header_buffer,cursor);
         if (fieldname == "Content-Length"_str)
         {
           cursor = header_buffer;

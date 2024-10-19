@@ -21,7 +21,7 @@ using namespace iro;
 template<typename T>
 struct StringMapElement
 {
-  str key;
+  String key;
   u64 hash;
   T   value;
 
@@ -71,7 +71,7 @@ struct StringMap
 
   /* --------------------------------------------------------------------------
    */
-  T* add(str key)
+  T* add(String key)
   {
     u64 hash = key.hash();
     if (Element* v = map.find(hash))
@@ -87,7 +87,7 @@ struct StringMap
 
   /* --------------------------------------------------------------------------
    */
-  T* find(str key)
+  T* find(String key)
   {
     if (Element* v = map.find(key.hash()))
       return &v->value;

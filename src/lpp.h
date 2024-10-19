@@ -40,14 +40,14 @@ struct Lpp
 
   b8 initialized;
 
-  str input;
-  str output;
+  String input;
+  String output;
 
   b8  generate_depfile;
-  str depfile_output;
+  String depfile_output;
 
   b8 output_metafile;
-  str metafile_output;
+  String metafile_output;
 
   // True when we should run in lsp mode (--lsp).
   b8 lsp;
@@ -60,7 +60,7 @@ struct Lpp
   b8 run();
 
   b8 processArgv(int argc, const char** argv);
-  b8 processStream(str name, io::IO* instream, io::IO* outstream);
+  b8 processStream(String name, io::IO* instream, io::IO* outstream);
 }; 
 
 }

@@ -19,7 +19,7 @@ using namespace iro;
  */
 struct Source 
 {
-  str name;
+  String name;
 
   // A cache of this source's content.
   // TODO(sushi) figure out when we're given memory that we can just 
@@ -48,7 +48,7 @@ struct Source
   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
-  b8   init(str name);
+  b8   init(String name);
   void deinit();
 
   // Writes to the cache and handles some state such as if 
@@ -58,8 +58,8 @@ struct Source
   // Caches line offsets in the cached buffer.
   b8 cacheLineOffsets();
 
-  str getStr(u64 offset, u64 length);
-  str getVirtualStr(u64 offset, u64 length);
+  String getStr(u64 offset, u64 length);
+  String getVirtualStr(u64 offset, u64 length);
 
   // Translate a byte offset into this source to 
   // a line and column.

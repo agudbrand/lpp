@@ -6,7 +6,7 @@
 
 /* ----------------------------------------------------------------------------
  */
-b8 Source::init(str name)
+b8 Source::init(String name)
 {
   if (!cache.open())
     return false;
@@ -47,7 +47,7 @@ b8 Source::cacheLineOffsets()
 
   line_offsets.push(0);
 
-  str s = cache.asStr();
+  String s = cache.asStr();
   for (s64 i = 0; i < s.len; i++)
   {
     if (s.ptr[i] == '\n')
@@ -60,14 +60,14 @@ b8 Source::cacheLineOffsets()
 
 /* ----------------------------------------------------------------------------
  */
-str Source::getStr(u64 loc, u64 len)
+String Source::getStr(u64 loc, u64 len)
 {
   return {cache.ptr + loc, len};
 }
 
 /* ----------------------------------------------------------------------------
  */
-str Source::getVirtualStr(u64 loc, u64 len)
+String Source::getVirtualStr(u64 loc, u64 len)
 {
   return {virtual_cache.ptr + loc, len};
 }

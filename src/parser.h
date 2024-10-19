@@ -47,7 +47,7 @@ struct Parser
 
   b8 at(Token::Kind kind);
 
-  str getRaw();
+  String getRaw();
 
   void writeTokenSanitized();
 

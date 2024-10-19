@@ -30,13 +30,13 @@ void URI::reset()
   body.clear();
 }
 
-b8 URI::parse(URI* uri, str s_)
+b8 URI::parse(URI* uri, String s_)
 {
-  str s = s_;
+  String s = s_;
 
   uri->reset();
 
-  str::pos p = s.findFirst(':');
+  String::pos p = s.findFirst(':');
   if (!p)
   {
     ERROR("URI::parse(): failed to find ':' to delimit scheme in given string '", s_, "'\n");
@@ -52,7 +52,7 @@ b8 URI::parse(URI* uri, str s_)
     s.ptr += 2;
     if ((p = s.findFirst('/')))
     {
-      uri->authority.write(str{s.ptr, p.x});
+      uri->authority.write(String{s.ptr, p.x});
       s.ptr = s.ptr + p.x + 1;
     }
     else

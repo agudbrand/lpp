@@ -16,7 +16,7 @@ static Logger logger =
  */
 b8 Section::initDocument(
     u64 start_offset_, 
-    str raw, 
+    String raw, 
     SectionNode* node_,
     io::Memory* buffer)
 {
@@ -35,7 +35,7 @@ b8 Section::initDocument(
  */
 b8 Section::initMacro(
     u64 start_offset, 
-    str macro_indent, 
+    String macro_indent, 
     u64 macro_idx, 
     SectionNode* node)
 {
@@ -67,7 +67,7 @@ void Section::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Section::insertString(u64 offset, str s)
+b8 Section::insertString(u64 offset, String s)
 {
   assert(offset <= buffer->len);
 
@@ -97,7 +97,7 @@ b8 Section::consumeFromBeginning(u64 len)
     return true;
   }
 
-  // idk man find a way to not move shit around later maybe with just a str ? 
+  // idk man find a way to not move shit around later maybe with just a String ? 
   // idk we edit stuff too much and IDRC at the moment!!!
   mem::move(buffer->ptr, buffer->ptr + len, buffer->len - len);
   buffer->len -= len;
@@ -208,7 +208,7 @@ Scope* Metaprogram::getCurrentScope()
 
 /* ----------------------------------------------------------------------------
  */
-void Metaprogram::addDocumentSection(u64 start, str raw)
+void Metaprogram::addDocumentSection(u64 start, String raw)
 {
   auto node = getCurrentScope()->sections.pushTail();
   node->data = sections.pushTail()->data;
@@ -217,7 +217,7 @@ void Metaprogram::addDocumentSection(u64 start, str raw)
 
 /* ----------------------------------------------------------------------------
  */
-void Metaprogram::addMacroSection(s64 start, str indent, u64 macro_idx)
+void Metaprogram::addMacroSection(s64 start, String indent, u64 macro_idx)
 {
   auto node = getCurrentScope()->sections.pushTail();
   node->data = sections.pushTail()->data;
@@ -253,12 +253,12 @@ static void printExpansion(Source* input, Source* output, Expansion& expansion)
  */
 struct TranslatedError
 {
-  str filename;
+  String filename;
   u64 line;
-  str error;
+  String error;
 };
 
-TranslatedError translateLuaError(Metaprogram& mp, str error)
+TranslatedError translateLuaError(Metaprogram& mp, String error)
 {
   TranslatedError te = {nil};
 
@@ -267,7 +267,7 @@ TranslatedError translateLuaError(Metaprogram& mp, str error)
     error = error.sub("[string "_str.len + 1);
     te.filename = error.sub(0, error.findFirst('"'));
     error = error.sub(te.filename.len + 3);
-    str num = error.sub(0, error.findFirst(':'));
+    String num = error.sub(0, error.findFirst(':'));
     u8 terminated[24];
     if (!num.nullTerminate(terminated, 24))
     {
@@ -675,7 +675,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
 
 /* ----------------------------------------------------------------------------
  */
-str Metaprogram::consumeCurrentScope()
+String Metaprogram::consumeCurrentScope()
 {
   auto scope = getCurrentScope();
   if (!processScopeSections(scope))
@@ -683,7 +683,7 @@ str Metaprogram::consumeCurrentScope()
 
   // TODO(sushi) properly allocate this in a way that it can be cleaned up
   //             do not feel like setting that up right now.
-  str out = scope->buffer->asStr().allocateCopy();
+  String out = scope->buffer->asStr().allocateCopy();
   scope->buffer->clear();
 
   while (scope->sections.head)
@@ -755,7 +755,7 @@ b8 sectionIsMacro(SectionNode* section);
 LPP_LUAJIT_FFI_FUNC
 void metaprogramAddMacroSection(
     Metaprogram* mp, 
-    str indent, 
+    String indent, 
     u64 start, 
     u64 macro_idx)
 {
@@ -765,7 +765,7 @@ void metaprogramAddMacroSection(
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-void metaprogramAddDocumentSection(Metaprogram* mp, u64 start, str raw)
+void metaprogramAddDocumentSection(Metaprogram* mp, u64 start, String raw)
 {
   mp->addDocumentSection(start, raw);
 }
@@ -798,7 +798,7 @@ void metaprogramDeleteCursor(Metaprogram* mp, Cursor* cursor)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-str metaprogramGetMacroIndent(Metaprogram* mp)
+String metaprogramGetMacroIndent(Metaprogram* mp)
 {
   assert(sectionIsMacro(mp->current_section));
   return mp->current_section->data->macro_indent;
@@ -807,7 +807,7 @@ str metaprogramGetMacroIndent(Metaprogram* mp)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-str metaprogramGetOutputSoFar(Metaprogram* mp)
+String metaprogramGetOutputSoFar(Metaprogram* mp)
 {
   return mp->output->cache.asStr();
 }
@@ -852,13 +852,13 @@ LineAndColumn metaprogramMapInputOffsetToLineAndColumn(
 
 /* ----------------------------------------------------------------------------
  *  Processes the sections of the current scope and returns the result as a 
- *  str. This does not end the scope.
+ *  String. This does not end the scope.
  *
  *  TODO(sushi) a version of this could be made that forks the scope and 
  *              returns it to be evaluated later.
  */
 LPP_LUAJIT_FFI_FUNC
-str metaprogramConsumeCurrentScopeString(Metaprogram* mp)
+String metaprogramConsumeCurrentScopeString(Metaprogram* mp)
 {
   return mp->consumeCurrentScope();
 }
@@ -947,7 +947,7 @@ u32 cursorCurrentCodepoint(Cursor* cursor)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-b8 cursorInsertString(Cursor* cursor, str text)
+b8 cursorInsertString(Cursor* cursor, String text)
 {
   Section* s = cursor->section->data;
   if (s->kind != Section::Kind::Document)
@@ -978,7 +978,7 @@ SectionNode* cursorGetSection(Cursor* cursor)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-str cursorGetRestOfSection(Cursor* cursor)
+String cursorGetRestOfSection(Cursor* cursor)
 {
   assert(sectionIsDocument(cursorGetSection(cursor)));
   return cursor->range;
@@ -1003,7 +1003,7 @@ SectionNode* metaprogramGetCurrentSection(Metaprogram* mp)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-str sectionGetString(SectionNode* section)
+String sectionGetString(SectionNode* section)
 {
   return section->data->buffer->asStr();
 }
@@ -1043,7 +1043,7 @@ b8 sectionIsDocument(SectionNode* section)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-b8 sectionInsertString(SectionNode* section, u64 offset, str s)
+b8 sectionInsertString(SectionNode* section, u64 offset, String s)
 {
   assert(sectionIsDocument(section));
   return section->data->insertString(offset, s);
@@ -1052,7 +1052,7 @@ b8 sectionInsertString(SectionNode* section, u64 offset, str s)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-b8 sectionAppendString(SectionNode* section, str s)
+b8 sectionAppendString(SectionNode* section, String s)
 {
   assert(sectionIsDocument(section));
   return section->data->insertString(section->data->buffer->len, s);

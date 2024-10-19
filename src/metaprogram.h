@@ -52,7 +52,7 @@ struct Section
   SectionNode* node = nullptr;
 
   u64 macro_idx = -1;
-  str macro_indent = nil;
+  String macro_indent = nil;
 
 
   /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -61,19 +61,19 @@ struct Section
 
   b8 initDocument(
       u64 start_offset, 
-      str raw, 
+      String raw, 
       SectionNode* node,
       io::Memory* buffer);
 
   b8 initMacro(
       u64 start_offset, 
-      str macro_indent, 
+      String macro_indent, 
       u64 macro_idx, 
       SectionNode* node);
 
   void deinit();
 
-  b8 insertString(u64 start, str s);
+  b8 insertString(u64 start, String s);
   b8 consumeFromBeginning(u64 len);
 };
 
@@ -111,7 +111,7 @@ struct Cursor
 
   // the codepoint at the beginning of 'range'
   utf8::Codepoint current_codepoint;
-  str range;
+  String range;
 
   u64 offset; // into current section
 };
@@ -206,12 +206,12 @@ struct Metaprogram
   void   popScope();
   Scope* getCurrentScope();
 
-  void addDocumentSection(u64 start, str s);
-  void addMacroSection(s64 start, str indent, u64 macro_idx);
+  void addDocumentSection(u64 start, String s);
+  void addMacroSection(s64 start, String indent, u64 macro_idx);
 
   b8 processScopeSections(Scope* scope);
 
-  str consumeCurrentScope();
+  String consumeCurrentScope();
 
   s32 mapMetaprogramLineToInputLine(s32 line);
 

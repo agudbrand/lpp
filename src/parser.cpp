@@ -116,7 +116,7 @@ b8 Parser::run()
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
         {
-          str raw = getRaw();
+          String raw = getRaw();
           u64 from = curt->loc;
           locmap.push({.from = bytes_written, .to = curt->loc});
           for (s32 i = 0; i < raw.len; ++i)
@@ -136,7 +136,7 @@ b8 Parser::run()
         TRACE("placing lua block: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
         {
-          str raw = getRaw();
+          String raw = getRaw();
           locmap.push({.from = bytes_written, .to = curt->loc});
           for (s32 i = 0; i < raw.len; ++i)
           {
@@ -187,8 +187,8 @@ b8 Parser::run()
 
           if (curt->kind == MacroMethod)
           {
-            str mobj = getRaw().sub(0, curt->method_colon_offset);
-            str mfun = getRaw().sub(curt->method_colon_offset+1, curt->len);
+            String mobj = getRaw().sub(0, curt->method_colon_offset);
+            String mfun = getRaw().sub(curt->method_colon_offset+1, curt->len);
             writeOut("true,", mobj, '.', mfun, ',', mobj);
           }
           else
@@ -281,7 +281,7 @@ b8 Parser::at(Token::Kind kind)
 
 /* ----------------------------------------------------------------------------
  */
-str Parser::getRaw()
+String Parser::getRaw()
 {
   return curt->getRaw(source);
 }

@@ -58,7 +58,7 @@ struct Token
   s32 method_colon_offset = 0;
 
   // Retrieve the raw string this token encompasses from the given Source
-  str getRaw(Source* src) 
+  String getRaw(Source* src) 
   { 
     if (kind == Kind::MacroHereDocArg)
       return src->getVirtualStr(loc, len);
