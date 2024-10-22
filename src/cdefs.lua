@@ -18,11 +18,11 @@ ffi.cdef
   typedef double   f64;
   typedef u8       b8; // booean type
 
-  typedef struct str
+  typedef struct String
   {
     const u8* s;
     u64 len;
-  } str;
+  } String;
 
   typedef struct
   {
@@ -30,10 +30,10 @@ ffi.cdef
     u64 len;
   } Bytes;
   
-  str getTokenIndentation(void* lpp, s32);
+  String getTokenIndentation(void* lpp, s32);
 
   typedef struct MetaprogramBuffer { void* memhandle; s64 memsize; } MetaprogramBuffer;
-  MetaprogramBuffer processFile(void* ctx, str path);
+  MetaprogramBuffer processFile(void* ctx, String path);
   void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf);
 
   typedef struct Metaprogram Metaprogram;
@@ -41,19 +41,23 @@ ffi.cdef
   typedef struct SectionNode SectionNode;
   typedef struct Scope Scope;
 
-  void metaprogramAddMacroSection(Metaprogram* ctx, str indentation, u64 start, u64 macro_idx);
-  void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, str s);
+  void metaprogramAddMacroSection(
+    Metaprogram* ctx, 
+    String indentation, 
+    u64 start, 
+    u64 macro_idx);
+  void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, String s);
 
   Cursor* metaprogramNewCursorAfterSection(Metaprogram* ctx);
   void metaprogramDeleteCursor(Metaprogram* ctx, Cursor* cursor);
 
-  str metaprogramGetMacroIndent(Metaprogram* ctx);
+  String metaprogramGetMacroIndent(Metaprogram* ctx);
 
   b8  cursorNextChar(Cursor* cursor);
   b8  cursorNextSection(Cursor* cursor);
   u32 cursorCurrentCodepoint(Cursor* cursor);
-  b8  cursorInsertString(Cursor* cursor, str text);
-  str cursorGetRestOfSection(Cursor* cursor);
+  b8  cursorInsertString(Cursor* cursor, String text);
+  String cursorGetRestOfSection(Cursor* cursor);
   SectionNode* cursorGetSection(Cursor* cursor);
 
   SectionNode* metaprogramGetCurrentSection(Metaprogram* mp);
@@ -65,17 +69,17 @@ ffi.cdef
   b8 sectionIsMacro(SectionNode* section);
   b8 sectionIsDocument(SectionNode* section);
 
-  b8 sectionInsertString(SectionNode* section, u64 offset, str s);
-  b8 sectionAppendString(SectionNode* section, str s);
+  b8 sectionInsertString(SectionNode* section, u64 offset, String s);
+  b8 sectionAppendString(SectionNode* section, String s);
 
-  str sectionGetString(SectionNode* section);
+  String sectionGetString(SectionNode* section);
 
   b8 sectionConsumeFromBeginning(SectionNode* section, u64 len);
 
-  str metaprogramGetOutputSoFar(Metaprogram* ctx);
+  String metaprogramGetOutputSoFar(Metaprogram* ctx);
   void metaprogramTrackExpansion(Metaprogram* ctx, u64 from, u64 to);
   s32 metaprogramMapMetaprogramLineToInputLine(Metaprogram* mp, s32 line);
-  str metaprogramConsumeCurrentScopeString(Metaprogram* mp);
+  String metaprogramConsumeCurrentScopeString(Metaprogram* mp);
 
   SectionNode* metaprogramGetTopMacroInvocation(Metaprogram* mp);
   Metaprogram* metaprogramGetPrev(Metaprogram* mp);

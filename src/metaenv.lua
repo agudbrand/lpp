@@ -17,7 +17,7 @@ local List = require "list"
 local buffer = require "string.buffer"
 local util = require "util"
 
-local strtype = ffi.typeof("str")
+local strtype = ffi.typeof("String")
 local makeStr = function(s)
   return strtype(s, #s)
 end

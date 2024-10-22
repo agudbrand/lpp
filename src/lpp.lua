@@ -16,7 +16,7 @@ local buffer = require "string.buffer"
 local List = require "list"
 local Twine = require "twine"
 
-local strtype = ffi.typeof("str")
+local strtype = ffi.typeof("String")
 local strToLua = function(s)
   return ffi.string(s.s, s.len)
 end
