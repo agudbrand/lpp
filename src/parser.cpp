@@ -8,7 +8,7 @@ namespace lpp
 {
 
 static Logger logger = 
-  Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
+  Logger::create("lpp.parser"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
  */
@@ -109,6 +109,14 @@ b8 Parser::run()
         nextToken();
         break;
 
+      case Whitespace:
+        writeOut(
+          "__metaenv.doc("_str, curt->loc, ",\""_str);
+        writeTokenSanitized();
+        writeOut("\")\n"_str);
+        nextToken();
+        break;
+
       case Document:
         // TODO(sushi) consider just using offsets into the input file 
         //             here instead of a whole lua string.
@@ -167,8 +175,8 @@ b8 Parser::run()
       case MacroSymbol:
       case MacroSymbolImmediate:
         {
-          b8 is_immediate = curt->kind == MacroSymbolImmediate;
           TRACE("encountered macro symbol\n");
+          b8 is_immediate = curt->kind == MacroSymbolImmediate;
           locmap.push({.from = bytes_written, .to = curt->loc});
 
           if (is_immediate)
@@ -180,10 +188,14 @@ b8 Parser::run()
               source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
               "\",");
 
-          nextToken(); // identifier
+          TRACE("getting id\n");
+          nextSignificantToken(); // identifier
+          TRACE("got id\n");
 
           locmap.push({.from = bytes_written, .to = curt->loc});
           writeOut('"', getRaw(), "\",");
+
+          TRACE("wrote name\n");
 
           if (curt->kind == MacroMethod)
           {
@@ -194,11 +206,15 @@ b8 Parser::run()
           else
             writeOut("false,", getRaw());
 
-          nextToken();
+          TRACE("wrote method\n");
+
+          nextSignificantToken();
           if (at(MacroTupleArg))
           {
+            TRACE("at tuple args\n");
             for (;;)
             {
+              TRACE("parsing tuple arg ", getRaw(), "\n");
               // TODO(sushi) it's possible we could lazily load macro arguments
               //             from the input file instead of creating lua 
               //             strings. I'm not really sure if this would be 
@@ -226,6 +242,11 @@ b8 Parser::run()
               //             distinct from Section at that point and I 
               //             dont wannnnnaa do that since this is already 
               //             here :). 
+              // NOTE(sushi) we can probably just store this information 
+              //             separately from the args and provide an 
+              //             interface for accessing it. Similar to what we
+              //             currently do to get at the file offset of a 
+              //             macro arg, just dont wrap the args in MacroParts.
               writeOut(',', 
                 "__metaenv.lpp.MacroPart.new(",
                 '"', source->name, '"', ',',
@@ -234,13 +255,14 @@ b8 Parser::run()
                 '"');
               writeTokenSanitized();
               writeOut('"', ')');
-              nextToken();
+              nextSignificantToken();
               if (not at(MacroTupleArg))
                 break;
             }
           }
           else if (at(MacroStringArg))
           {
+            TRACE("at string arg\n");
             locmap.push({.from = bytes_written, .to = curt->loc});
             writeOut(',',
                 "__metaenv.lpp.MacroPart.new(",
@@ -269,6 +291,20 @@ b8 Parser::run()
 b8 Parser::nextToken()
 {
   curt += 1;
+  TRACE("found ", *curt, "\n");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Parser::nextSignificantToken()
+{
+  for (;;)
+  {
+    nextToken();
+    if (not at(Token::Kind::Whitespace))
+      break;
+  }
   return true;
 }
 

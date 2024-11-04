@@ -221,7 +221,7 @@ return function(ctx)
         is_method = false
         return arg
       end
-    end).arr
+    end)
 
     local invoker
     local errhandler = function(err)
@@ -348,7 +348,7 @@ return function(ctx)
         is_method = false
         return arg
       end
-    end).arr
+    end)
 
     local errhandler = function(err)
       resolveImportStackTrace():each(function(line)

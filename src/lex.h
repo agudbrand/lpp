@@ -38,13 +38,15 @@ struct Token
     MacroMethod, // a macro that uses : to call a method
     MacroTupleArg, // (a, b, c, ...)
     MacroStringArg,   // "..."
-    MacroHereDocArg, // <-[term] * ([term]|->)
+    MacroHereDocArg, // <-[term] ... ([term]|->)
 
     // Any text that lpp is preprocessing. Eg. if we 
     // are preprocessing a C file, this is C code.
     Document, 
 
     DollarSign,
+
+    Whitespace,
   };
 
   Kind kind = Kind::Invalid;
@@ -114,10 +116,23 @@ private:
 
   Token curt;
 
+  b8 lexDocument();
+
+  b8 lexLuaLine(); // '$'
+  b8 lexLuaInline(); // '$'['<'...'>']'('...')'
+  b8 lexLuaBlock(); // '$$$'
+  b8 lexLuaLineOrInlineOrBlock();
+
+  b8 lexMacro(); // '@'
+  b8 lexMacroName();
+  b8 lexMacroTupleArgs();
+  b8 lexMacroStringArg();
+
   b8 readStreamIfNeeded(b8 peek);
   b8 decodeCurrent();
 
-  void initCurt();
+  void initCurt() { initCurtAt(current_offset); }
+  void initCurtAt(u64 offset);
   void finishCurt(Token::Kind kind, s32 len_offset = 0);
 
   u32 current();
@@ -130,8 +145,25 @@ private:
   b8 atDigit();
   b8 atWhitespace();
 
+  // Don't forget that this could move!
+  Token* lookback(u64 n)
+  {
+    assert(n && n <= tokens.len());
+    return &tokens.end()[-n];
+  }
+
+  b8 lookbackIs(u64 n, Token::Kind k)
+  {
+    return lookback(n)->kind == k;
+  }
+
+  b8 lookbackIs(Token::Kind k)
+  {
+    return lookbackIs(1, k);
+  }
+
   void advance(s32 n = 1);
-  void skipWhitespace();
+  void skipWhitespace(b8 supress_token = false);
 
   template<typename... T>
   b8 errorAt(s32 line, s32 column, T... args);
@@ -141,6 +173,33 @@ private:
 
   template<typename... T>
   b8 errorHere(T... args);
+
+  struct ScopedLexStage
+  {
+    Lexer& lex;
+    ScopedLexStage(
+        Lexer& lex,
+        const char* funcname) 
+      : lex(lex)
+    {
+      onEnter(funcname);
+      lex.stage_depth += 1;
+    }
+
+    ~ScopedLexStage()
+    {
+      lex.stage_depth -= 1;
+      onExit();
+    }
+
+    void onEnter(const char* funcname);
+    void onExit();
+
+    template<typename... T>
+    void log(T... args);
+  };
+
+  u64 stage_depth = 0;
 };
 
 }
@@ -160,10 +219,15 @@ static s64 format(io::IO* io, lpp::Token::Kind& kind)
   c(LuaInline);
   c(LuaBlock);
   c(MacroSymbol);
+  c(MacroSymbolImmediate);
   c(MacroIdentifier);
+  c(MacroMethod);
   c(MacroTupleArg);
   c(MacroStringArg);
+  c(MacroHereDocArg);
   c(Document);
+  c(DollarSign);
+  c(Whitespace);
 #undef c
     default: assert(!"invalid token kind"); return 0;
   }

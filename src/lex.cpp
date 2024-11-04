@@ -12,6 +12,36 @@ namespace lpp
 static Logger logger = 
   Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
+
+/* ----------------------------------------------------------------------------
+ */
+void Lexer::ScopedLexStage::onEnter(const char* funcname)
+{
+  log("enter ", funcname, " at ", 
+    io::SanitizeControlCharacters((char)lex.current()), "\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Lexer::ScopedLexStage::onExit()
+{
+  log("leave at ", 
+      io::SanitizeControlCharacters((char)lex.current()), "\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename... T>
+void Lexer::ScopedLexStage::log(T... args)
+{
+  for (u32 i = 0; i < lex.stage_depth; ++i)
+    DEBUG(" ");
+  DEBUG(args...);
+}
+
+#define LEX_STAGE \
+  ScopedLexStage stage(*this, __func__)
+
 /* ----------------------------------------------------------------------------
  */
 u32 Lexer::current() { return current_codepoint.codepoint; }
@@ -34,11 +64,11 @@ b8 Lexer::atWhitespace() { return 0 != isspace(current()); }
 b8 Lexer::readStreamIfNeeded(b8 peek)
 {
   if (current_offset + (peek? current_codepoint.advance : 0) 
-      == source->cache.len)
+      >= source->cache.len)
   {
     TRACE("reading more bytes from stream... \n");
 
-    Bytes reserved = source->cache.reserve(128);
+    Bytes reserved = source->cache.reserve(4096);
     s64 bytes_read = in->read(reserved);
     if (bytes_read == -1)
     {
@@ -142,10 +172,16 @@ b8 Lexer::errorHere(T... args)
 
 /* ----------------------------------------------------------------------------
  */
-void Lexer::skipWhitespace()
+void Lexer::skipWhitespace(b8 suppress_token)
 {
-  while (atWhitespace())
+  if (not atWhitespace())
+    return;
+  if (!suppress_token)
+    initCurt();
+  while (atWhitespace() and not eof())
     advance();
+  if (!suppress_token)
+    finishCurt(Token::Kind::Whitespace);
 }
 
 /* ----------------------------------------------------------------------------
@@ -155,7 +191,6 @@ b8 Lexer::init(io::IO* input_stream, Source* src)
   assert(input_stream and src);
 
   TRACE("initializing with input stream '", src->name, "'\n");
-  SCOPED_INDENT;
 
   tokens = TokenArray::create();
   in = input_stream;
@@ -183,47 +218,13 @@ void Lexer::deinit()
  */
 b8 Lexer::run()
 {
-  using enum Token::Kind;
+  LEX_STAGE;
 
-  TRACE("run\n");
+  using enum Token::Kind;
 
   for (;;)
   {
-    initCurt();
     skipWhitespace();
-
-    s32 trailing_space_start = 0;
-    s32 trailing_space_len = 0;
-
-    // TODO(sushi) implement escaping lpp's special characters by 
-    //             splitting the document at the escape character.
-
-    while (
-        not at('@') and
-        not at('$') and
-        not eof())
-    {
-      if (trailing_space_len == 0)
-      {
-        if (isspace(current()) and not at('\n'))
-        {
-          trailing_space_start = current_offset;
-          trailing_space_len = current_codepoint.advance;
-        }
-      }
-      else
-      {
-        if (at('\n') or not isspace(current()))
-          trailing_space_len = 0;
-        else
-          trailing_space_len += current_codepoint.advance;
-      }
-
-      advance();
-
-    }
-
-    finishCurt(Document);
 
     if (eof())
     {
@@ -232,263 +233,409 @@ b8 Lexer::run()
       return true;
     }
 
-    if (at('$'))
+    switch (current())
     {
-      initCurt();
-      advance();
-      finishCurt(DollarSign);
-      if (at('$'))
+    case '@':
+      if (!lexMacro())
+        return false;
+      break;
+    case '$':
+      if (!lexLuaLineOrInlineOrBlock())
+        return false;
+      break;
+    default:
+      if (!lexDocument())
+        return false;
+      break;
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexDocument()
+{
+  initCurt();
+
+  u64 last_non_whitespace = current_offset;
+
+  while (
+      not at('@') and
+      not at('$') and
+      not eof())
+  {
+    if (at('\\'))
+    {
+      switch (peek())
       {
-        advance();
-        if (at('$'))
-        {
+        case '$':
+        case '@':
+          // Escape an lpp symbol by splitting the document at the backslash.
+          finishCurt(Document, -1);
           advance();
           initCurt();
-
-          for (;;)
-          {
-            if ((advance(), at('$')) and
-                (advance(), at('$')) and
-                (advance(), at('$')))
-            {
-              advance();
-              finishCurt(LuaBlock, -3);
-              break;
-            }
-
-            if (eof())
-              return errorAtToken(curt, 
-                  "unexpected eof while consuming lua block");
-          }
-        }
-        else
-        {
-          // dont handle this case for now 
-          return errorHere("two '$' in a row is currently unrecognized");
-        }
-      }
-      else if (at('('))
-      {
-        advance();
-        initCurt();
-
-        s64 nesting = 1;
-        for (;;)
-        {
-          advance();
-          if (eof()) 
-            return errorAtToken(curt, 
-                "unexpected eof while consuming inline lua expression");
-          
-          if (at('(')) 
-            nesting += 1;
-          else if (at(')'))
-          {
-            if (nesting == 1)
-              break;
-            else 
-              nesting -= 1;
-          }
-        }
-
-        finishCurt(LuaInline);
-        advance();
-      }
-      else
-      {
-        initCurt();
-        while (not at('\n') and not eof())
-          advance();
-
-        finishCurt(LuaLine);
-
-        if (not eof())
-          advance();
-
-        // Remove whitespace before lua lines to preserve formatting 
-        // NOTE(sushi) this is a large reason why the lexer is not 
-        //             token-stream based anymore!
-        if (tokens.len() != 0)
-        {
-          Token* last = tokens.arr + tokens.len() - 2;
-          String raw = last->getRaw(source);
-          while (isspace(raw.ptr[last->len-1]) && 
-                 raw.ptr[last->len-1] != '\n')
-            last->len -= 1;
-        }
       }
     }
-    else if (at('@'))
+
+    if (not atWhitespace())
+      last_non_whitespace = current_offset;
+
+    advance();
+  }
+
+  if (not eof() and last_non_whitespace < current_offset - 1)
+  {
+    u64 whitespace_start = last_non_whitespace + 1;
+    finishCurt(Document, whitespace_start - current_offset);
+    initCurtAt(whitespace_start);
+    finishCurt(Whitespace);
+  }
+  else
+    finishCurt(Document);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexLuaLineOrInlineOrBlock()
+{
+  LEX_STAGE;
+
+  assert(at('$'));
+  initCurt();
+  if (advance(), at('$'))
+  {
+    if (advance(), at('$'))
+      return lexLuaBlock();
+    else
+      return errorHere("$$ has no meaning yet."_str);
+  }
+  else if (at('(') or at('<'))
+    return lexLuaInline();
+  else
+    return lexLuaLine();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexLuaBlock()
+{
+  LEX_STAGE;
+
+  assert(at('$'));
+  advance();
+  initCurt();
+  
+  for (;;)
+  {
+    if ((advance(), at('$')) and
+        (advance(), at('$')) and
+        (advance(), at('$')))
     {
-      initCurt();
       advance();
-      curt.macro_indent_loc = trailing_space_start;
-      curt.macro_indent_len = trailing_space_len;
-      Token::Kind macro_kind = MacroSymbol;
-      if (at('@'))
-      {
-        advance();
-        macro_kind = MacroSymbolImmediate;
-      }
-      finishCurt(macro_kind);
+      finishCurt(LuaBlock, -3);
+      break;
+    }
 
-      skipWhitespace();
-      initCurt();
+    if (eof())
+      return errorAtToken(curt, 
+        "unexpected eof while consuming lua block");
+  }
 
-      if (not atFirstIdentifierChar())
-        return errorHere("expected an identifier of a macro after '@'");
-      
-      // NOTE(sushi) allow '.' so that we can index tables through macros, eg.
-      //             $ local lib = {}
-      //             $ lib.func = function() print("hi!") end
-      //
-      //             @lib.func()
-      // TODO(sushi) this could maybe be made more advanced by allowing 
-      //             arbitrary whitespace between the dots.
-      b8 found_colon = false;
-      while (atIdentifierChar() or 
-             at('.') or 
-             at(':'))
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexLuaInline()
+{
+  LEX_STAGE;
+
+  assert(at('<') or at('('));
+  if (at('('))
+  {
+    advance();
+    initCurt();
+
+    s64 nesting = 1;
+    for (;;)
+    {
+      advance();
+      if (eof()) 
+        return errorAtToken(curt, 
+            "unexpected eof while consuming inline lua expression");
+
+      if (at('(')) 
+        nesting += 1;
+      else if (at(')'))
       {
-        if (at(':'))
-        {
-          // Peek ahead and see if an identifier character follows. If not 
-          // then assume this is some document syntax being used directly
-          // after a macro call.
-          if (isFirstIdentifierChar(peek()))
-            found_colon = true;
+        if (nesting == 1)
           break;
-        }
-        advance();
+        else 
+          nesting -= 1;
       }
-      
-      if (found_colon)
-      {
-        curt.method_colon_offset = current_offset - curt.loc;
-        advance();
-        while(atIdentifierChar())
-          advance();
+    }
 
-        if (at('.') or at(':'))
-          return errorHere("cannot use ':' or '.' after method syntax");
+    finishCurt(LuaInline);
+    advance();
+  }
+  else
+    assert(!"need to implement inline attributes");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexLuaLine()
+{
+  LEX_STAGE;
+
+  initCurt();
+  while (not at('\n') and not eof())
+    advance();
+
+  finishCurt(LuaLine);
+
+  // Advance and init curt to prevent keeping the newline.
+  advance();
+  initCurt();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexMacro()
+{
+  LEX_STAGE;
+
+  initCurt();
+  advance();
+  Token::Kind macro_kind = MacroSymbol;
+  if (at('@'))
+  {
+    advance();
+    macro_kind = MacroSymbolImmediate;
+  }
+  finishCurt(macro_kind);
+
+  skipWhitespace();
+
+  if (!lexMacroName())
+    return false;
+
+  skipWhitespace();
+
+  switch (current())
+  {
+  case '(':
+    return lexMacroTupleArgs();
+  case '"':
+    return lexMacroStringArg();
+  default:
+    return true;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexMacroName()
+{
+  LEX_STAGE;
+
+  initCurt();
+
+  if (not atFirstIdentifierChar())
+    return errorHere("expected an identifier of a macro after '@'");
+
+  // NOTE(sushi) allow '.' so that we can index tables through macros, eg.
+  //             $ local lib = {}
+  //             $ lib.func = function() print("hi!") end
+  //
+  //             @lib.func()
+  b8 found_colon = false;
+  while (atIdentifierChar() or 
+         at('.') or 
+         at(':'))
+  {
+    if (at(':'))
+    {
+      // Peek ahead and see if an identifier character follows. If not 
+      // then assume this is some document syntax being used directly
+      // after a macro call, eg. a colon following a case expression.
+      if (isFirstIdentifierChar(peek()))
+        found_colon = true;
+      break;
+    }
+    advance();
+  }
+
+  if (found_colon)
+  {
+    curt.method_colon_offset = current_offset - curt.loc;
+    advance();
+    while(atIdentifierChar())
+      advance();
+
+    if (at('.') or at(':'))
+      return errorHere("cannot use ':' or '.' after method syntax");
+  }
+
+  if (found_colon)
+    finishCurt(MacroMethod);
+  else
+    finishCurt(MacroIdentifier);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexMacroTupleArgs()
+{
+  LEX_STAGE;
+
+  assert(at('('));
+  advance();
+  skipWhitespace();
+
+  if (at(')'))
+  {
+    // dont create a token for empty macro args
+    advance();
+    initCurt();
+    return true;
+  }
+
+  u64 brace_nesting = 0;
+  u64 paren_nesting = 1;
+
+  initCurt();
+
+  for (;;)
+  {
+    while (
+        not at(',') and 
+        not at(')') and 
+        not at('{') and
+        not at('}') and
+        not at('(') and 
+        not at(')') and
+        not eof())
+      advance();
+
+    if (eof())
+      return errorAtToken(curt, 
+          "unexpected end of file while consuming macro arguments");
+
+    b8 done = false;
+    b8 reset_curt = false;
+    switch (current())
+    {
+    case ',':
+      // Tuple macro syntax allows using braces in an argument 
+      // to suppress splitting the string by commas.
+      if (brace_nesting == 0 &&
+          paren_nesting == 1)
+      {
+        finishCurt(MacroTupleArg);
+        reset_curt = true;
       }
-      
-      if (found_colon)
-        finishCurt(MacroMethod);
+      break;
+    case '(':
+      paren_nesting += 1;
+      break;
+    case ')':
+      if (paren_nesting == 1)
+        done = true;
       else
-        finishCurt(MacroIdentifier);
+        paren_nesting -= 1;
+      break;
+    case '{':
+      brace_nesting += 1;
+      break;
+    case '}':
+      if (brace_nesting)
+        brace_nesting -= 1;
+      break;
+    }
 
-      if (curt.getRaw(source).hash() == "child.style"_hashed)
-      {
-        ERROR("child style\n");
-      }
+    if (done)
+    {
+      finishCurt(MacroTupleArg);
+      break;
+    }
 
-      skipWhitespace();
+    advance();
+    skipWhitespace(true);
+    if (reset_curt)
+      initCurt();
+  }
 
-      switch (current())
-      {
-      case '(':
-        advance();
-        skipWhitespace();
+  if (lookbackIs(MacroTupleArg))
+    advance(); // past the )
 
-        if (at(')'))
-        {
-          // dont create a token for empty macro args
-          advance();
-          initCurt();
-          break;
-        }
+  return true;
+}
 
-        {
-          u64 brace_nesting = 0;
-          u64 paren_nesting = 1;
+/* ----------------------------------------------------------------------------
+ */
+b8 Lexer::lexMacroStringArg()
+{
+  LEX_STAGE;
 
-          initCurt();
+  advance();
+  initCurt();
 
-          for (;;)
-          {
-            while (
-                not at(',') and 
-                not at(')') and 
-                not at('{') and
-                not at('}') and
-                not at('(') and 
-                not at(')') and
-                not eof())
-              advance();
+  for (;;)
+  {
+    advance();
+    if (eof())
+      return errorAtToken(curt, 
+          "unexpected end of file while consuming macro string "
+          "argument");
 
-            if (eof())
-              return errorAtToken(curt, 
-                  "unexpected end of file while consuming macro arguments");
+    if (at('"'))
+      break;
+  }
+  finishCurt(MacroStringArg);
+  advance();
 
-            b8 done = false;
-            b8 reset_curt = false;
-            switch (current())
-            {
-            case ',':
-              // Tuple macro syntax allows using braces in an argument 
-              // to suppress splitting the string by commas.
-              if (brace_nesting == 0 &&
-                  paren_nesting == 1)
-              {
-                finishCurt(MacroTupleArg);
-                reset_curt = true;
-              }
-              break;
-            case '(':
-              paren_nesting += 1;
-              break;
-            case ')':
-              if (paren_nesting == 1)
-                done = true;
-              else
-                paren_nesting -= 1;
-              break;
-            case '{':
-              brace_nesting += 1;
-              break;
-            case '}':
-              if (brace_nesting)
-                brace_nesting -= 1;
-              break;
-            }
+  return true;
+}
 
-            if (done)
-            {
-              finishCurt(MacroTupleArg);
-              break;
-            }
+/* ----------------------------------------------------------------------------
+ */
+void Lexer::initCurtAt(u64 offset)
+{
+  assert(offset <= current_offset);
+  curt.kind = Token::Kind::Eof;
+  curt.loc = offset;
+}
 
-            advance();
-            skipWhitespace();
-            if (reset_curt)
-              initCurt();
-          }
-        }
+/* ----------------------------------------------------------------------------
+ */
+void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
+{
+  // assert(kind != Whitespace || !lookbackIs(Whitespace));
+  s32 len = len_offset + current_offset - curt.loc;
+  if (len > 0)
+  {
+    curt.kind = kind;
+    curt.len = len;
+    tokens.push(curt);
 
-        advance();
-        initCurt();
-        break;
+    DEBUG("finished ", curt, "\n");
+    TRACE("==| ", io::SanitizeControlCharacters(curt.getRaw(source)), "\n");
+  }
+}
 
-      case '"':
-        advance();
-        initCurt();
+}
 
-        for (;;)
-        {
-          advance();
-          if (eof())
-            return errorAtToken(curt, 
-                "unexpected end of file while consuming macro string "
-                "argument");
-
-          if (at('"'))
-            break;
-        }
-        finishCurt(MacroStringArg);
-        advance();
-        break;
-
+// TODO(sushi) heredoc syntax (usable outside of macro args as well)
       // Here-doc argument of syntax:
       //   <-
       //   ...
@@ -536,39 +683,3 @@ b8 Lexer::run()
       //      terminator.
       //    }
       //  }
-
-      }
-    }
-    else
-    {
-      
-    }
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Lexer::initCurt()
-{
-  curt.kind = Token::Kind::Eof;
-  curt.loc = current_offset;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
-{
-  s32 len = len_offset + current_offset - curt.loc;
-  if (len > 0)
-  {
-    curt.kind = kind;
-    curt.len = len;
-    tokens.push(curt);
-
-    TRACE("finished ", curt, "\n");
-  }
-}
-
-}

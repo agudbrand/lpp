@@ -44,6 +44,7 @@ struct Parser
   // internal stuff
 
   b8 nextToken();
+  b8 nextSignificantToken();
 
   b8 at(Token::Kind kind);
 
